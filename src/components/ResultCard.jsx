@@ -258,9 +258,23 @@ export function ResultCard({
       {/* Model Performance & Batch Metadata */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-subtle)', padding: '0.45rem 0.65rem', borderRadius: 'var(--radius-btn)', border: '1px solid var(--border-color)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
         <div>
-          Model: <strong className="mono">{result.model_version || "gemini-3.8-flash-vision-rtn-v2"}</strong> (1 batched inference)
+          {result.is_demo_mode ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <span className="badge" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', fontSize: '0.65rem', padding: '1px 6px' }}>
+                DEMO MODE (OFFLINE BENCHMARK)
+              </span>
+              <span>Model: <strong className="mono">{result.model_version}</strong></span>
+            </span>
+          ) : (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <span className="badge" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.65rem', padding: '1px 6px' }}>
+                LIVE GEMINI VISION
+              </span>
+              <span>Model: <strong className="mono">{result.model_version}</strong> (1 batched call)</span>
+            </span>
+          )}
         </div>
-        <div className="mono">Latency: {result.latency_ms || 650}ms</div>
+        <div className="mono">Latency: {result.latency_ms || 0}ms</div>
       </div>
 
       {/* Expandable Evidence Panel */}

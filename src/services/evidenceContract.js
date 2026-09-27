@@ -26,14 +26,16 @@ export function generateEvidenceRecord({
 
   // Build checks[] array strictly with required keys:
   // check_key, verdict, confidence, detail, model_version, latency_ms
-  const modelVersion = inspectionResult.model_version || "gemini-3.8-flash-vision-rtn-v2";
+  const modelVersion = inspectionResult.model_version || "gemini-3.5-flash";
   const latencyMs = inspectionResult.latency_ms || 650;
 
   const checks = [
     {
       check_key: "identity_match",
       verdict: inspectionResult.identity, // PASS | FAIL | UNCERTAIN
-      confidence: inspectionResult.identity === "UNCERTAIN" ? 0.45 : (inspectionResult.identity === "PASS" ? 0.98 : 0.96),
+      confidence: inspectionResult.confidence?.identity !== undefined
+        ? inspectionResult.confidence.identity
+        : (inspectionResult.identity === "UNCERTAIN" ? 0.45 : (inspectionResult.identity === "PASS" ? 0.98 : 0.96)),
       detail: inspectionResult.identity_basis || (inspectionResult.identity === "PASS" ? "Visual features align with catalogue specification" : "Mismatch against product master"),
       model_version: modelVersion,
       latency_ms: latencyMs
@@ -41,7 +43,9 @@ export function generateEvidenceRecord({
     {
       check_key: "completeness_bom",
       verdict: inspectionResult.completeness, // PASS | FAIL | UNCERTAIN
-      confidence: inspectionResult.missing?.length === 0 ? 0.97 : 0.95,
+      confidence: inspectionResult.confidence?.completeness !== undefined
+        ? inspectionResult.confidence.completeness
+        : (inspectionResult.missing?.length === 0 ? 0.97 : 0.95),
       detail: inspectionResult.missing?.length === 0 ? "All expected accessories present" : `Missing components: ${inspectionResult.missing.join(", ")}`,
       missing_items: inspectionResult.missing || [],
       model_version: modelVersion,
@@ -50,7 +54,9 @@ export function generateEvidenceRecord({
     {
       check_key: "observed_state_assessment",
       verdict: inspectionResult.observed_state || "opened_unused",
-      confidence: inspectionResult.observed_state === "uncertain" ? 0.40 : 0.96,
+      confidence: inspectionResult.confidence?.condition !== undefined
+        ? inspectionResult.confidence.condition
+        : (inspectionResult.observed_state === "uncertain" ? 0.40 : 0.96),
       detail: inspectionResult.observed_state_basis || `Observed physical package state: ${inspectionResult.observed_state}`,
       model_version: modelVersion,
       latency_ms: latencyMs
@@ -58,7 +64,9 @@ export function generateEvidenceRecord({
     {
       check_key: "amazon_condition_grading",
       verdict: inspectionResult.amazon_condition || inspectionResult.condition || "Used - Good",
-      confidence: (inspectionResult.amazon_condition === "Uncertain" || inspectionResult.condition === "UNCERTAIN") ? 0.40 : 0.94,
+      confidence: inspectionResult.confidence?.condition !== undefined
+        ? inspectionResult.confidence.condition
+        : ((inspectionResult.amazon_condition === "Uncertain" || inspectionResult.condition === "UNCERTAIN") ? 0.40 : 0.94),
       detail: inspectionResult.condition_basis || `Graded against Amazon's published condition guidelines`,
       scale_used: "Amazon Official: [New, Used - Like New, Used - Very Good, Used - Good, Used - Acceptable, Unacceptable, Uncertain]",
       model_version: modelVersion,
