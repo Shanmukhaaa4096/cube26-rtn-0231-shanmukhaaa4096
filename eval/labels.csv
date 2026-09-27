@@ -1,0 +1,11 @@
+unit_id,image_path,human_label_1_identity,human_label_1_completeness,human_label_1_condition,human_label_1_disposition,human_label_2_identity,human_label_2_completeness,human_label_2_condition,human_label_2_disposition
+UNIT-EVAL-001,eval/fixtures/correct-product/sample_01.jpg,,,,,,,,
+UNIT-EVAL-002,eval/fixtures/wrong-product/sample_01.jpg,,,,,,,,
+UNIT-EVAL-003,eval/fixtures/missing-accessory/sample_01.jpg,,,,,,,,
+UNIT-EVAL-004,eval/fixtures/missing-multiple/sample_01.jpg,,,,,,,,
+UNIT-EVAL-005,eval/fixtures/new/sample_01.jpg,,,,,,,,
+UNIT-EVAL-006,eval/fixtures/lightly-used/sample_01.jpg,,,,,,,,
+UNIT-EVAL-007,eval/fixtures/damaged/sample_01.jpg,,,,,,,,
+UNIT-EVAL-008,eval/fixtures/heavily-damaged/sample_01.jpg,,,,,,,,
+UNIT-EVAL-009,eval/fixtures/ambiguous-condition/sample_01.jpg,,,,,,,,
+UNIT-EVAL-010,eval/fixtures/similar-lookalike/sample_01.jpg,,,,,,,,
