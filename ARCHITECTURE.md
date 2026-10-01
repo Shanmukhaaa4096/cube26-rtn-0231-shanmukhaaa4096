@@ -1,179 +1,203 @@
-# Architecture & Engineering Design · Returns Manager
+# Returns Manager Architecture
 
-**Cube Buildathon · Round 2 · Step 04: Customer Return**  
-*System Architecture, Data Flow, Multimodal Inference Pipeline, Tenancy Isolation, and Governance Specifications.*
+## 1. System Overview
 
----
-
-## 1. System Architecture & End-to-End Data Flow
-
-The Returns Manager transforms unorganized parcel returns into verifiable, cryptographically-hashed operational evidence. The end-to-end data pipeline is structured as follows:
+**Returns Manager** is an automated returns inspection system designed for warehouse fulfillment operators. The system converts raw, unstructured parcel return photographs into verified, structured evidence, evaluates product completeness and physical condition against catalogue specifications, and derives operational routing recommendations using deterministic business rules.
 
 ```mermaid
 flowchart TD
-    A[Warehouse Intake Station: Photos, Barcode, Unit ID] --> B{Pre-Flight Triage & Tenancy Check}
-    B -->|Unregistered SKU / Ambiguity Flag| C[Safety Quarantine: Route to pending_review]
-    B -->|Valid Tenant Session + SKU| D[Catalogue Spec & BOM Retrieval]
-    D --> E[Multimodal Input Assembly: Image Base64 + BOM + Amazon Scale]
-    E --> F[Single-Call Batched Gemini Vision Model]
-    F -->|HTTP 503 / Network Timeout| G[Fail-Open Resilient Handler: Preserve Payload]
-    G --> H[pending_review Status]
-    F -->|Successful JSON Inference| I[Strict JSON Parser & Schema Validator]
-    I --> J[Check 1: Identity Match PASS / FAIL / UNCERTAIN]
-    I --> K[Check 2: Completeness BOM PASS / FAIL / UNCERTAIN]
-    I --> L[Check 3: Amazon Condition Grading New to Unacceptable]
-    J & K & L --> M{Deterministic Disposition Derivation in Code}
-    M -->|Any Check UNCERTAIN or Identity FAIL| H
-    M -->|New / Like New + Complete| N[restock: 100% Margin Recovery]
-    M -->|Used Good / Very Good + Incomplete| O[refurbish: Prep Bay Replenishment]
-    M -->|Used Acceptable / Cosmetic Wear| P[liquidate: B2B Secondary Pallet]
-    M -->|Broken / Defective / Hazardous| Q[dispose: Scrap Recycling]
-    H & N & O & P & Q --> R[Evidence Contract Assembly: 14 Fields]
-    R --> S[Cryptographic SHA-256 Content Hash Calculation]
-    S --> T[Downstream Recovery Manager Staging Ledger]
+    A[Warehouse Intake: Scanned Parcel & Photos] --> B[Pre-Flight & Upload Validation]
+    B -->|MIME / Size Checked| C[Catalogue Enrichment: SKU & BOM]
+    C --> D[Batched Gemini Vision Multimodal Inference]
+    D -->|Network Error / 503| E[Fail-Open Resilient Handler]
+    E --> F[Route to Human Checking]
+    D -->|JSON Response| G[JSON Parser & Schema Validator]
+    G --> H[Check 1: Product Identity PASS / FAIL / UNCERTAIN]
+    G --> I[Check 2: Included Accessories PASS / FAIL / UNCERTAIN]
+    G --> J[Check 3: Amazon Condition Graded Scale]
+    G --> K[Check 4: Photo Clarity & Optical Quality]
+    H & I & J & K --> L[Deterministic Decision Engine]
+    L -->|Any Check Uncertain or Mismatch| F
+    L -->|Pristine + Complete| M[Put Back in Stock]
+    L -->|Minor Wear / Missing Cable| N[Send for Repair]
+    L -->|Noticeable Signs of Use| O[Sell Through Clearance]
+    L -->|Severe Damage / Broken| P[Dispose of Item]
+    F & M & N & O & P --> Q[Operator Result Screen: 5-Second Review]
+    Q -->|Approve| R[Final Decision Recorded]
+    Q -->|Override| S[Supervisor Override with Reason & Audit Note]
+    S --> R
+    R --> T[14-Field Evidence Contract Assembly]
+    T --> U[FIPS 180-4 SHA-256 Hash Generation]
+    U --> V[Immutable Ledger Storage]
 ```
 
-### Data Pipeline Stages:
-1. **Intake & Upload Pre-Flight**: Operator scans parcel barcode, selects or inputs unit ID, and attaches high-resolution photos. The upload layer validates MIME types (`image/jpeg`, `image/png`, `image/webp`), enforces a 10MB per-file boundary, and stages images into tenant-isolated URI paths (`tenants/{orgId}/vault/...`).
-2. **Master Catalogue Enrichment**: The SKU is matched against the authoritative catalogue (`src/data/catalogue.js`) to extract technical descriptions, expected parts lists (Bill of Materials), and key visual verification markers (logos, ports, finishes).
-3. **Batched Multimodal Vision Call**: Instead of chaining multiple slow, expensive LLM calls, photos and specifications are bundled into a single batched prompt sent to Google Gemini Vision.
-4. **Validation & Normalization with Retry**: The engine parses the structured JSON response, enforces strictly validated types, and retries once upon syntax failure before activating fail-open logic.
-5. **Deterministic Disposition Derivation**: Dispositions are **derived in application code**, never left to LLM hallucination. Business logic evaluates the three check verdicts and maps them to the appropriate disposition.
-6. **Evidence Contract Generation**: Assembles the official 14-field JSON contract with check details, model latency, confidence scores, and a deterministic SHA-256 hash.
+---
+
+## 2. Major Components
+
+### 1. Frontend Client (`src/App.jsx`, `src/components/*`)
+- **Inspection Station** (`InspectionUpload.jsx`, `ResultCard.jsx`): Allows operators to scan barcodes, look up orders, attach photos, and receive 5-second human-language recommendations.
+- **Human Review / Attention Queue** (`App.jsx` `attention` tab): Surfaces items in the facility requiring manual confirmation due to blurry photos, lookalike models, or conflicting evidence.
+- **Completed Returns Log** (`HistoryLog.jsx`): Responsive audit ledger that converts from a full table on desktop into touch-friendly stacked cards on mobile devices.
+- **Human Override Dialog** (`OverrideModal.jsx`): Collects revised decisions and mandatory operational justifications, ensuring the original AI recommendation is preserved.
+- **Cryptographic Contract Viewer** (`ContractModal.jsx`): Displays the 14-field JSON contract and verified SHA-256 hash.
+
+### 2. AI Vision Inspector (`src/services/aiInspector.js`)
+- Interfaces with the official `@google/generative-ai` SDK using `gemini-2.0-flash` (with automatic fallback to `gemini-1.5-flash`).
+- Formulates a single batched multimodal prompt containing all inspection photos and the master catalogue Bill of Materials (BOM).
+- Extracts structured visual evidence: product match status, parts present, parts missing, observed physical condition, and photo quality flags.
+- Contains an offline vision fallback analyzer when no API key is present, ensuring reliable testing without network dependency.
+
+### 3. Deterministic Decision Engine (`src/services/decisionEngine.js`)
+- Decouples AI perception from business policy.
+- Evaluates the four core inspection checks to determine the recommended action:
+  - `restock` (Put back in stock)
+  - `refurbish` (Send for repair)
+  - `liquidate` (Sell through clearance)
+  - `dispose` (Dispose of item)
+  - `pending_review` (Needs human checking)
+- Computes multi-factor **confidence gating** by taking the lowest meaningful confidence across core checks rather than masking uncertainty behind an average.
+
+### 4. Human-Facing Translation Layer (`src/utils/userFacingText.js`)
+- Formats all internal enum values and technical data into plain, professional warehouse language.
+- Generates 1–2 sentence "Why?" explanations grounded in the evidence.
+- Maps decimal confidence scores into a simple 3-tier traffic-light system: 🟢 **High**, 🟡 **Medium**, 🔴 **Low**.
+
+### 5. Evidence Contract & Integrity Layer (`src/services/evidenceContract.js`)
+- Assembles an immutable 14-field JSON contract matching the Buildathon Round 2 standard schema for downstream recovery systems.
+- Computes cryptographic SHA-256 digests using a pure JavaScript FIPS 180-4 implementation.
+
+### 6. Tenancy & Security Storage Layer (`src/services/authAndStorage.js`)
+- Enforces query-level tenancy isolation between warehouse facilities (`org_demo_alpha` vs `org_demo_bravo`).
+- Enforces upload security: MIME whitelist (`image/jpeg`, `image/png`, `image/webp`), 10MB file limit, and non-guessable tenant paths.
+- Provides session authentication with 5-attempt rate-limiting lockout protection.
 
 ---
 
-## 2. Why Google Gemini Vision Was Chosen
+## 3. End-to-End Data Flow
 
-Automated returns triage requires high spatial resolution, fine-grained object detection across cluttered multi-item photos, and low inference latency. Google Gemini Vision (`gemini-3.5-flash` / `gemini-3.8-flash`) was selected based on four architectural criteria:
-
-| Criterion | Requirement in Returns Warehouse | Gemini Flash Vision Advantage |
-| :--- | :--- | :--- |
-| **Multimodal Resolution** | Inspect small USB-C ports, serial laser-etching, and cable braid textures. | High-fidelity image tokenization without downscaling artifacts. |
-| **Batched Multi-Attribute Reasoning** | Produce identity, BOM completeness, and condition grading simultaneously. | Strong instruction-following across complex multi-part prompts in a single inference pass. |
-| **Sub-Second Operational Latency** | Warehouse conveyor stations cannot pause for 10-15 second sequential chains. | Native flash architecture delivers real-world latency under 1500ms on multi-image inputs. |
-| **Cost Efficiency at Scale** | Processing hundreds of returns daily must not erode product recovery margins. | Ultra-low per-token pricing ensures each return inspection costs fractions of a cent. |
+```text
+Operator scans parcel / selects SKU
+        ↓
+Catalogue specification & BOM retrieved from catalogue.js
+        ↓
+Operator attaches 1 to 4 photographs
+        ↓
+Files validated: MIME whitelist, 10MB limit, tenant image vault path generated
+        ↓
+Single batched Gemini Vision call (images + BOM specifications)
+        ↓
+AI returns structured JSON findings
+        ↓
+Parser validates schema; falls open to 'pending_review' if malformed
+        ↓
+Decision Engine derives disposition using deterministic business rules
+        ↓
+User-facing translation layer translates findings into natural language
+        ↓
+Operator reviews 5-second result screen
+        ↓
+Operator approves recommendation OR overrides with documented reason
+        ↓
+14-field evidence contract assembled and hashed with SHA-256
+        ↓
+Return record saved to immutable facility ledger
+```
 
 ---
 
-## 3. The 14-Field Evidence Contract Schema
+## 4. Model & AI Configuration
 
-The generated evidence document strictly conforms to the Buildathon Round 2 standard contract format required by the downstream **Recovery Manager**:
-
+- **Primary Vision Model**: `gemini-2.0-flash`
+- **Fallback Vision Model**: `gemini-1.5-flash`
+- **SDK**: `@google/generative-ai` (v0.24.1)
+- **Input Parameters**:
+  - `temperature: 0.1` (low temperature to maximize deterministic factual consistency)
+  - `responseMimeType: "application/json"`
+- **Structured Output Schema**:
 ```json
 {
-  "record_id": "RTN-0015",
-  "schema_version": "2026.04",
-  "organization_id": "org_demo_alpha",
-  "client_id": "client_demo_alpha",
-  "agent": "04-returns-manager-agent",
-  "subject": {
-    "unit_id": "UNIT-0015",
-    "order_id": "ORD-SCEN-10001",
-    "sku": "SKU-HEADPHONE-BT",
-    "asin": "B09HEADPH1",
-    "product_name": "AeroSound Pro Wireless Noise-Cancelling Headphones"
+  "identity": "PASS | FAIL | UNCERTAIN",
+  "identity_basis": "string",
+  "completeness": "PASS | FAIL | UNCERTAIN",
+  "missing": ["string"],
+  "observed_state": "factory_sealed | opened_unused | signs_of_use | damaged | empty_box | uncertain",
+  "observed_state_basis": "string",
+  "amazon_condition": "New | Used - Like New | Used - Very Good | Used - Good | Used - Acceptable | Unacceptable | Uncertain",
+  "condition_basis": "string",
+  "image_quality": {
+    "blur_score": 0.0,
+    "is_blurry": false,
+    "glare_detected": false,
+    "dark_lighting": false,
+    "sufficient_for_verdict": true
   },
-  "captured_at": "2026-09-27T14:45:00.000Z",
-  "operator_label": "op_fatima",
-  "images": [
-    {
-      "photo_id": "img_RTN-0015_1",
-      "uri": "tenants/org_demo_alpha/vault/tok_a78f1e/UNIT-0015_img1.jpg",
-      "label": "Front view - Headphone and molded hardshell case"
-    }
-  ],
-  "checks": [
-    {
-      "check_key": "identity_match",
-      "verdict": "PASS",
-      "confidence": 0.98,
-      "detail": "Laser-etched AeroSound logo on hinge matches catalogue specification.",
-      "model_version": "gemini-3.5-flash",
-      "latency_ms": 1120
-    },
-    {
-      "check_key": "completeness_bom",
-      "verdict": "PASS",
-      "confidence": 0.96,
-      "detail": "All expected accessories present.",
-      "missing_items": [],
-      "model_version": "gemini-3.5-flash",
-      "latency_ms": 1120
-    },
-    {
-      "check_key": "observed_state_assessment",
-      "verdict": "factory_sealed",
-      "confidence": 0.96,
-      "detail": "Manufacturer clear seal stickers on box ends are unbroken.",
-      "model_version": "gemini-3.5-flash",
-      "latency_ms": 1120
-    },
-    {
-      "check_key": "amazon_condition_grading",
-      "verdict": "New",
-      "confidence": 0.94,
-      "detail": "Graded against Amazon's published condition guidelines.",
-      "scale_used": "Amazon Official: [New, Used - Like New, Used - Very Good, Used - Good, Used - Acceptable, Unacceptable, Uncertain]",
-      "model_version": "gemini-3.5-flash",
-      "latency_ms": 1120
-    }
-  ],
-  "outcome": {
-    "recommended_disposition": "restock",
-    "final_disposition": "restock",
-    "uncertainty_flag": false,
-    "confidence_note": null,
-    "evidence_trail": [
-      "Visual match: 100% feature alignment with AeroSound Pro reference model",
-      "Raw observed_state: 'factory_sealed' with undisturbed seals",
-      "Amazon condition: 'New' (meets full restock standard)"
-    ]
-  },
-  "overrides": null,
-  "status": "FINALIZED",
-  "content_hash": "sha256_5a9f3b18c0e2d147"
+  "physical_observations": ["string"],
+  "contradictions": ["string"]
 }
 ```
 
 ---
 
-## 4. Fail-Open Architecture & UNCERTAIN Governance
+## 5. Important Engineering Decisions
 
-### Fail-Open Resilience
-In high-throughput e-commerce operations, a network timeout, upstream API outage (503 Service Unavailable), or unparseable image must **never drop a return case** or crash the conveyor station. 
-- **Immediate Catch & Staging**: If the Gemini API fails or times out, the system catches the exception and immediately persists all submitted photos, order metadata, and operator notes.
-- **Fail-Open Routing**: The case is assigned `disposition: "pending_review"` with status `PENDING_REVIEW` and flagged with `FAIL_OPEN_TRIGGERED`.
-- **Physical Station Dispatch**: The parcel is automatically dispatched to the warehouse supervisor physical inspection desk for manual adjudication.
+### 1. AI Vision for Observation, Deterministic Rules for Action
+The model is never allowed to directly invent or determine the final business disposition. The vision model reports *what it physically sees* (identity, missing parts, wear, blur); application code evaluates those findings against established fulfillment rules. This eliminates unpredictable model hallucinations in financial/operational routing.
 
-### First-Class UNCERTAIN Handling
-The system rejects the flawed pattern of binary PASS/FAIL force-fitting:
-- If glare, motion blur, occlusion, or bad lighting obscures key features, the model returns `UNCERTAIN`.
-- If a product resembles a close lookalike or clone where authenticity cannot be certified without physical disassembly, the model outputs `identity: "UNCERTAIN"`.
-- In all instances, code enforces that **any UNCERTAIN check strictly mandates `pending_review`**, ensuring zero unverified items are restocked on prime shelves.
+### 2. Multi-Photo Evidence Aggregation
+The engine analyzes up to 4 photos per return. Accessories visible in Photo 2 but occluded in Photo 1 are correctly credited as present. An item is never assumed missing simply because it is absent in a single frame.
+
+### 3. First-Class Uncertainty & Fail-Open Resilience
+`UNCERTAIN` is treated as a valid, expected operational outcome. When optical conditions are inadequate (glare, blur, low contrast) or an item is visually identical to a clone, the system never guesses. The case is routed safely to `pending_review` ("Needs human checking").
+
+### 4. Benchmark Isolation
+The codebase cleanly separates demo/benchmark scenario metadata from the live inspection pipeline. Pre-computed scenario results exist solely for automated compliance testing; live inspections always process uploaded image bytes through the real visual inspection engine.
 
 ---
 
-## 5. Tenancy Isolation & Security Design
+## 6. Failure Handling
 
-The application implements defense-in-depth isolation between organizations (e.g. `org_demo_alpha` and `org_demo_bravo`):
+| Failure Mode | Trigger | System Behavior |
+| :--- | :--- | :--- |
+| **API Timeout / Network Down** | Gemini API unavailable (HTTP 503 / timeout) | Fails open: sets disposition to `pending_review`, logs a network note, and preserves all user inputs without dropping the return. |
+| **Malformed Model Output** | Vision model returns non-JSON or missing fields | JSON schema validator catches error and safely routes case to `pending_review`. |
+| **Blurry or Dark Photography** | Optical quality check detects blur score < 0.50 or dark frame | Flags warning, provides plain-language upload advice, and routes to human checking. |
+| **Contradictory Visual Evidence** | Packaging looks new, but unit exhibits surface scratches | Contradiction detector flags the conflict and routes case to supervisor review. |
+| **Cross-Tenant Access Attempt** | Operator attempts to view unit from another facility | Query layer intercepts attempt, records a security audit event, and returns HTTP 403 `PERMISSION_DENIED`. |
 
-### 1. Cryptographically Bound Sessions
-- When an operator authenticates (`authenticateUser`), their session token is cryptographically bound to their organization ID (`org_id`).
-- Operator permissions are enforced (`operator` vs `supervisor`).
+---
 
-### 2. Query-Level Data Segregation
-- Database queries (`getTenantReturns`) filter strictly by the session's `org_id`.
-- Zero row leakage: Even with direct ID queries, attempting to access a cross-tenant record ID returns `HTTP 403 PERMISSION_DENIED`.
+## 7. Security Architecture
 
-### 3. Non-Guessable Isolated Storage Vaults
-- Photos are never stored under predictable incremental paths (e.g. `/images/1.jpg`).
-- Image URIs follow tenant-scoped cryptographic salt paths:
-  ```
-  tenants/{orgId}/vault/{tenantSaltToken}/{unitId}_img{photoIndex}.jpg
-  ```
-- Cross-tenant image path requests are intercepted and denied at the application boundary.
+1. **Server-Side API Key Protection**: Private keys (`GEMINI_API_KEY`) remain strictly on the backend and are accessed exclusively through `/api/inspect`. No secret is shipped in client JavaScript bundles.
+2. **Server-Side Rate Limiting**: The `/api/inspect` endpoint enforces in-memory rate limiting (max 20 requests per minute per tenant/IP) to prevent quota exhaustion and abuse.
+3. **Server-Side Upload Validation**: File uploads are validated server-side for MIME type (`image/jpeg`, `image/png`, `image/webp`), size ceiling (10MB max), and structure before processing.
+4. **Session Authentication & Rate Limiting**: Operators authenticate with facility-bound sessions. Consecutive failed login attempts trigger an exponential security lockout.
+5. **Tenancy Isolation**: Multi-tenant boundaries are enforced at the query level. Staff at `org_demo_alpha` cannot query or view returns assigned to `org_demo_bravo`.
+6. **Input Sanitization**: All user-controlled text inputs (order IDs, unit barcodes, override reasons) pass through HTML entity sanitizers before rendering to neutralize cross-site scripting (XSS).
+7. **Cryptographic Integrity**: Evidence contracts use pure JavaScript FIPS 180-4 SHA-256 calculation to guarantee tamper detection across downstream systems.
 
-### 4. Input Sanitization & File Whitelisting
-- All text inputs (notes, operator IDs, search terms) undergo HTML entity encoding to neutralize script injection (`<script>alert()</script>` → `&lt;script&gt;`).
-- File uploads are validated against an allowed MIME whitelist (`image/jpeg`, `image/png`, `image/webp`) and enforced below a 10MB size ceiling.
+---
+
+## 8. Deployment Architecture
+
+The application is deployed with a Vite frontend and serverless inspection endpoint (compatible with Vercel, Netlify, or Express):
+
+```text
+Browser Client (React SPA)
+        ↓ POST /api/inspect (photos & order data)
+Serverless Function / API Endpoint (api/inspect.js)
+  [Rate Limiter: 20 req/min | Upload Validator: 10MB JPEG/PNG/WEBP | GEMINI_API_KEY]
+        ↓
+Google Gemini 2.0 Flash Vision API
+        ↓ Extracted Evidence
+Deterministic Business Rules Engine (evaluates disposition)
+        ↓ Auditable Result Envelope (No secrets exposed)
+Browser Client UI
+```
+
+- **Production Build**: Verified with `npm run build` using Vite 6.
+- **Deployment Status**: Deployment ready.
+- **Production Environment Variables**:
+  - `GEMINI_API_KEY`: Server-only Google Gemini API Key.
+

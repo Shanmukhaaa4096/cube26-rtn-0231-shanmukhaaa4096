@@ -234,6 +234,137 @@ async function runTests() {
   assert(overriddenContract.overrides.revised_verdict === "refurbish", "Preserved revised verdict");
   assert(overriddenContract.overrides.reason.includes("sleeve"), "Preserved reason");
 
+  // 11. Operational Verification of Specification #16 (Real AI Agent Behavior)
+  console.log("\n11. Testing Specification #16 Operational Real-World Scenarios...");
+
+  // Case 1: Correct product + complete + pristine -> restock
+  const op1 = await batchInspectReturn({
+    sku: "SKU-HEADPHONE-BT",
+    orderId: "ORD-OP-01",
+    photos: [
+      { url: "https://example.com/p1.jpg", label: "Front view sealed retail box with unbroken factory seals" },
+      { url: "https://example.com/p2.jpg", label: "Accessory check - USB-C, 3.5mm cable, manual laid out" }
+    ]
+  });
+  assert(op1.identity === "PASS" && op1.completeness === "PASS" && op1.disposition === "restock", "OpCase 1: Pristine + Complete -> restock");
+
+  // Case 2: Correct product + missing accessory -> refurbish
+  const op2 = await batchInspectReturn({
+    sku: "SKU-HEADPHONE-BT",
+    orderId: "ORD-OP-02",
+    photos: [
+      { url: "https://example.com/p1.jpg", label: "Headphones in opened box, clean condition" },
+      { url: "https://example.com/p2.jpg", label: "Missing USB-C cable, empty cable pocket in case" }
+    ]
+  });
+  assert(op2.identity === "PASS" && op2.completeness === "FAIL" && op2.disposition === "refurbish", "OpCase 2: Correct product + missing accessory -> refurbish");
+
+  // Case 3: Correct product + cosmetic wear -> used-grade disposition
+  const op3 = await batchInspectReturn({
+    sku: "SKU-LAMP-LED",
+    orderId: "ORD-OP-03",
+    photos: [
+      { url: "https://example.com/p1.jpg", label: "Lamp base showing noticeable cosmetic scratches and scuffs from heavy use" },
+      { url: "https://example.com/p2.jpg", label: "All cables and power adapter laid out" }
+    ]
+  });
+  assert(op3.identity === "PASS" && ["Used - Very Good", "Used - Good", "Used - Acceptable"].includes(op3.amazon_condition), "OpCase 3: Cosmetic wear graded appropriately");
+
+  // Case 4: Severe physical damage -> dispose
+  const op4 = await batchInspectReturn({
+    sku: "SKU-PUZZLE-500",
+    orderId: "ORD-OP-04",
+    photos: [
+      { url: "https://example.com/p1.jpg", label: "Crushed box top and ruptured seam with broken pieces" }
+    ]
+  });
+  assert(op4.observed_state === "damaged" && op4.disposition === "dispose", "OpCase 4: Severe physical damage -> dispose");
+
+  // Case 5: Wrong product -> identity failure
+  const op5 = await batchInspectReturn({
+    sku: "SKU-HEADPHONE-BT",
+    orderId: "ORD-OP-05",
+    photos: [
+      { url: "https://example.com/p1.jpg", label: "Wrong product: cheap generic unbranded plastic earbuds returned" }
+    ]
+  });
+  assert(op5.identity === "FAIL" && op5.contradictions.length > 0, "OpCase 5: Wrong product -> identity failure with contradiction");
+
+  // Case 6: Visually similar product -> uncertain identity -> pending_review
+  const op6 = await batchInspectReturn({
+    sku: "SKU-LAMP-LED",
+    orderId: "ORD-OP-06",
+    photos: [
+      { url: "https://example.com/p1.jpg", label: "Lookalike clone: Lamp base showing mechanical toggle switch instead of capacitive touch icons" }
+    ]
+  });
+  assert(op6.identity === "UNCERTAIN" && op6.disposition === "pending_review", "OpCase 6: Visually similar lookalike -> pending_review");
+
+  // Case 7: Blurry / low contrast image -> pending_review
+  const op7 = await batchInspectReturn({
+    sku: "SKU-SERUM-30",
+    orderId: "ORD-OP-07",
+    photos: [
+      { url: "https://example.com/p1.jpg", label: "Blurry low-contrast serial label with heavy flash glare" }
+    ]
+  });
+  assert((op7.image_quality.blur || op7.image_quality.insufficient_evidence) && op7.disposition === "pending_review", "OpCase 7: Blurry/glare image -> pending_review");
+
+  // Case 8: Missing camera angle / zero photos -> pending_review
+  const op8 = await batchInspectReturn({
+    sku: "SKU-HEADPHONE-BT",
+    orderId: "ORD-OP-08",
+    photos: []
+  });
+  assert(op8.disposition === "pending_review" && op8.image_quality.missing_views.length > 0, "OpCase 8: Missing camera angle -> pending_review with missing views guidance");
+
+  // Case 9: Contradictory evidence -> pending_review
+  const op9 = await batchInspectReturn({
+    sku: "SKU-HEADPHONE-BT",
+    orderId: "ORD-OP-09",
+    photos: [
+      { url: "https://example.com/p1.jpg", label: "Packaging shows AeroSound Pro but returned item shows generic unbranded plastic in-ear buds" }
+    ]
+  });
+  assert(op9.contradictions.length > 0 && op9.disposition !== "restock", "OpCase 9: Contradictory evidence prevents automatic restock");
+
+  // Case 10: Gemini / API failure -> pending_review with preserved case
+  const op10 = await batchInspectReturn({
+    sku: "SKU-HEADPHONE-BT",
+    orderId: "ORD-OP-10",
+    photos: [{ url: "https://example.com/p1.jpg", label: "Normal view" }],
+    simulateFailure: true
+  });
+  assert(op10.disposition === "pending_review" && op10.confidence_note.includes("FAIL_OPEN"), "OpCase 10: API failure triggers fail-open pending_review");
+
+  // Case 11: Supervisor override -> original AI preserved + override recorded
+  const op11Contract = generateEvidenceRecord({
+    recordId: "RTN-OP-11",
+    unitId: "UNIT-OP-11",
+    orgId: "org_demo_alpha",
+    orderId: "ORD-OP-11",
+    sku: "SKU-HEADPHONE-BT",
+    productName: "AeroSound Pro Headphones",
+    operatorId: "supervisor_dan",
+    photos: [{ url: "https://example.com/p1.jpg" }],
+    inspectionResult: op1,
+    overrides: {
+      original_verdict: op1.disposition,
+      revised_verdict: "refurbish",
+      reason: "Outer plastic sleeve has handling mark, requires clean packaging",
+      operator_id: "supervisor_dan",
+      timestamp: new Date().toISOString()
+    }
+  });
+  assert(op11Contract.status === "OVERRIDDEN" && op11Contract.outcome.recommended_disposition === "restock" && op11Contract.outcome.final_disposition === "refurbish", "OpCase 11: Supervisor override preserves original AI decision & records override");
+
+  // Case 12: Changing an image changes the AI result (No scenarioId secret forcing)
+  const imgA = [{ url: "https://example.com/imgA.jpg", label: "Sealed box with factory cellophane reflection" }];
+  const imgB = [{ url: "https://example.com/imgB.jpg", label: "Severed nylon strands and warped clasp with severe damage" }];
+  const resA = await batchInspectReturn({ sku: "SKU-PUZZLE-500", orderId: "ORD-A", photos: imgA });
+  const resB = await batchInspectReturn({ sku: "SKU-PUZZLE-500", orderId: "ORD-B", photos: imgB });
+  assert(resA.disposition !== resB.disposition && resA.condition !== resB.condition, `OpCase 12: Changing image changes AI verdict ('${resA.disposition}' vs '${resB.disposition}')`);
+
   console.log("\n================================================================================");
   console.log(`TOTAL SECURITY & COMPLIANCE TESTS: ${passed} PASSED, ${failed} FAILED`);
   console.log("================================================================================\n");
