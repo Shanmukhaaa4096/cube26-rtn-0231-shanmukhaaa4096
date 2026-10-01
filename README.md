@@ -2,6 +2,9 @@
 
 > An AI-powered returns inspection agent that analyzes returned products, identifies issues, evaluates condition and completeness, and recommends the appropriate next action.
 
+**Live Deployment**: [https://cube26-rtn-0231-shanmukhaaa4096.vercel.app](https://cube26-rtn-0231-shanmukhaaa4096.vercel.app)  
+**GitHub Repository**: [https://github.com/Shanmukhaaa4096/cube26-rtn-0231-shanmukhaaa4096](https://github.com/Shanmukhaaa4096/cube26-rtn-0231-shanmukhaaa4096)
+
 ---
 
 ## Problem Understanding

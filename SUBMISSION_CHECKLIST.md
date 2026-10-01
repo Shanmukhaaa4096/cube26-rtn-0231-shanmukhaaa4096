@@ -41,12 +41,9 @@ Use this checklist to verify that all materials for the **Returns Manager** subm
 ---
 
 ### Final Submission Steps (For Candidate / Team)
-- [ ] Push latest commits to your forked GitHub repository:
-  ```bash
-  git push origin main
-  ```
-- [ ] Deploy repository to Vercel, Netlify, or Cloudflare Pages (add `GEMINI_API_KEY` in server environment settings).
-- [ ] Verify live deployment URL in a browser.
+- [x] **Pushed commits to GitHub**: `https://github.com/Shanmukhaaa4096/cube26-rtn-0231-shanmukhaaa4096`
+- [x] **Deployed to Vercel**: `https://cube26-rtn-0231-shanmukhaaa4096.vercel.app`
+- [x] **Verified live deployment**: Tested HTTP 200 on frontend SPA and verified `/api/inspect` endpoint.
 - [ ] Record demo video following `DEMO_SCRIPT.md` and upload to YouTube/Loom.
 - [ ] Test the demo video link and ensure privacy is set to Public or Unlisted.
 - [ ] Submit GitHub Repository URL, Live Deployment URL, and Demo Video Link in the Cube submission portal.
