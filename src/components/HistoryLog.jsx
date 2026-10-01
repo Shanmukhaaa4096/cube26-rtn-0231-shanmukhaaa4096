@@ -5,7 +5,8 @@ import {
   DownloadIcon,
   EyeIcon,
   BuildingIcon,
-  BoxIcon
+  BoxIcon,
+  ActionIcon
 } from './Icons.jsx';
 import {
   translateDisposition,
@@ -149,7 +150,7 @@ export function HistoryLog({
               <option value="ALL">All Actions ({tenantRecords.length})</option>
               {Object.keys(ACTION_DEFINITIONS).map(key => (
                 <option key={key} value={key}>
-                  {ACTION_DEFINITIONS[key].icon} {ACTION_DEFINITIONS[key].title}
+                  {ACTION_DEFINITIONS[key].title}
                 </option>
               ))}
             </select>
@@ -217,18 +218,12 @@ export function HistoryLog({
 
                       <td>
                         <span className={`status-pill ${identity.cssClass}`}>
-                          {identity.status === 'pass' && '✓ '}
-                          {identity.status === 'fail' && '✗ '}
-                          {identity.status === 'uncertain' && '⚠ '}
                           {identity.label}
                         </span>
                       </td>
 
                       <td>
                         <span className={`status-pill ${completeness.cssClass}`}>
-                          {completeness.status === 'pass' && '✓ '}
-                          {completeness.status === 'fail' && '✗ '}
-                          {completeness.status === 'uncertain' && '⚠ '}
                           {completeness.label}
                         </span>
                       </td>
@@ -240,8 +235,8 @@ export function HistoryLog({
                       </td>
 
                       <td>
-                        <div className="table-action-badge">
-                          <span aria-hidden="true">{action.icon}</span>
+                        <div className="table-action-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <ActionIcon disposition={currentDisp} size={13} />
                           <span className={`badge ${action.badgeClass}`}>
                             {action.title}
                           </span>
@@ -320,7 +315,7 @@ export function HistoryLog({
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.55rem' }}>
-                    <span aria-hidden="true">{action.icon}</span>
+                    <ActionIcon disposition={currentDisp} size={14} />
                     <span className={`badge ${action.badgeClass}`}>{action.title}</span>
                     {item.overrides && (
                       <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>(Updated)</span>
@@ -329,10 +324,10 @@ export function HistoryLog({
 
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.65rem' }}>
                     <span className={`status-pill ${identity.cssClass}`}>
-                      {identity.status === 'pass' && '✓ '}{identity.status === 'fail' && '✗ '}{identity.status === 'uncertain' && '⚠ '}{identity.label}
+                      {identity.label}
                     </span>
                     <span className={`status-pill ${completeness.cssClass}`}>
-                      {completeness.status === 'pass' && '✓ '}{completeness.status === 'fail' && '✗ '}{completeness.status === 'uncertain' && '⚠ '}{completeness.label}
+                      {completeness.label}
                     </span>
                     <span className="condition-pill">{cond.title}</span>
                   </div>

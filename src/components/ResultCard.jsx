@@ -13,6 +13,7 @@ import {
   translateDisposition,
   translateConfidence,
   translateCondition,
+  translatePhotoQuality,
   generateRecommendationWhy
 } from '../utils/userFacingText.js';
 
@@ -36,7 +37,7 @@ export function ResultCard({
     return (
       <div className="ops-card result-loading-state" role="status" aria-live="polite">
         <div className="spinner-large" aria-hidden="true" />
-        <h2 className="loading-state-title">Checking return parcel...</h2>
+        <h2 className="loading-state-title">Checking the return...</h2>
         <p className="loading-state-desc">
           Examining photos, identifying product, checking accessories, and grading condition.
         </p>
@@ -49,9 +50,9 @@ export function ResultCard({
     return (
       <div className="ops-card result-empty-state">
         <BoxIcon size={40} className="empty-state-icon" />
-        <h2 className="empty-state-title">No result yet</h2>
+        <h2 className="empty-state-title">No return selected</h2>
         <p className="empty-state-desc">
-          Select a returned item and add photos to start checking it.
+          Select a returned item to start an inspection.
         </p>
       </div>
     );
@@ -61,78 +62,146 @@ export function ResultCard({
   const effectiveDisposition = overrideState ? overrideState.revised_verdict : result.disposition;
   const actionMeta = translateDisposition(effectiveDisposition);
   const confidenceMeta = translateConfidence(result.confidence, result.confidenceGating);
+  const conditionMeta = translateCondition(result.amazon_condition || result.condition, result.observed_state);
+  const photoQualityMeta = translatePhotoQuality(result.image_quality);
   const whyExplanation = generateRecommendationWhy(result, effectiveDisposition, overrideState, activeProduct);
   const isHumanCheckNeeded = effectiveDisposition === 'pending_review';
 
-  // Contextual confidence description directly under title (eliminates contradictory floating pill)
+  // Product check status
+  const identityPassed = result.identity === 'PASS';
+  const identityFailed = result.identity === 'FAIL';
+  const productStatusLabel = identityPassed ? 'Looks correct' : (identityFailed ? 'Problem found' : 'Not clear');
+  const productStatusClass = identityPassed ? 'status-tag-pass' : (identityFailed ? 'status-tag-fail' : 'status-tag-uncertain');
+
+  // Included items calculation (The single authoritative place for items info)
+  const expectedItems = activeProduct?.expectedParts || [];
+  const missingItems = Array.isArray(result.missing) ? result.missing : [];
+  const foundItems = expectedItems.filter(item => !missingItems.includes(item));
+  const hasMissing = missingItems.length > 0;
+  const completenessPassed = result.completeness === 'PASS';
+
+  // Contextual confidence description directly under title (replaces contradictory floating badge)
   const confidenceContextLine = isHumanCheckNeeded
-    ? (result.identity === 'FAIL'
+    ? (identityFailed
         ? 'High confidence: item mismatch'
         : (result.identity === 'UNCERTAIN'
             ? 'Low confidence: item identity inconclusive'
-            : (result.completeness === 'FAIL' || (result.missing && result.missing.length > 0)
+            : (hasMissing
                 ? 'High confidence: missing required items'
                 : (result.image_quality?.is_blurry || result.image_quality?.glare_detected
                     ? 'Low confidence: photo clarity insufficient'
                     : 'Manual checking required: visual evidence inconclusive'))))
     : (confidenceMeta.level === 'High'
-        ? 'High confidence: verified return'
+        ? 'High confidence: return verified'
         : `${confidenceMeta.level} confidence: inspection complete`);
-
-  // Build the 4 core check results (each one line)
-  // 1) Identity
-  const identityPassed = result.identity === 'PASS';
-  const identityFailed = result.identity === 'FAIL';
-  const identityText = identityPassed
-    ? `Matches ${activeProduct?.name || 'catalogue item'} (${result.identity_basis || 'Visual markings match'})`
-    : (identityFailed
-        ? `Item mismatch — ${result.identity_basis || 'Returned item does not match ordered product'}`
-        : `Identity uncertain — ${result.identity_basis || 'Cannot confirm authentic markings from photos'}`);
-
-  // 2) Completeness (The single authoritative place for missing items)
-  const completenessPassed = result.completeness === 'PASS';
-  const missingList = Array.isArray(result.missing) ? result.missing : [];
-  const completenessText = completenessPassed
-    ? `Complete — all expected parts present (${activeProduct?.expectedParts?.join(', ') || 'All items accounted for'})`
-    : (missingList.length > 0
-        ? `Missing: ${missingList.join(', ')}`
-        : (result.completeness === 'FAIL'
-            ? 'Incomplete — required accessory missing'
-            : 'Uncertain — could not verify all accessories from photos'));
-
-  // 3) Condition
-  const conditionMeta = translateCondition(result.amazon_condition || result.condition, result.observed_state);
-  const conditionText = `${conditionMeta.title} (${result.condition_basis || conditionMeta.description})`;
-
-  // 4) Recommended Action
-  const actionText = `${actionMeta.title} — ${actionMeta.actionLabel}`;
 
   return (
     <div className="result-card-container">
-      {/* Result Area:
-          1) One-line verdict
-          2) One-line why
-          3) The four check results (identity/completeness/condition/disposition) each one line
-      */}
-      <section className={`recommendation-hero hero-${actionMeta.heroClass}`} aria-label="Inspection verdict and results">
-        {/* 1. ONE-LINE VERDICT */}
-        <div className="rec-hero-header">
-          <div className="rec-hero-badge">
-            <span className="rec-icon" aria-hidden="true">{actionMeta.icon}</span>
-            <span className="rec-kicker">Recommended Action</span>
+      {/* HEADER: Inspection Complete + Product Title */}
+      <section className="result-complete-header" aria-label="Inspection verdict header">
+        <div className="result-kicker-row">
+          <span className="result-kicker">Inspection complete</span>
+          {(orderId || unitId) && (
+            <span className="result-meta-ids mono">
+              {orderId && <span>Order: {orderId}</span>}
+              {unitId && <span> | Unit: {unitId}</span>}
+            </span>
+          )}
+        </div>
+        <h2 className="result-product-title">{activeProduct?.name || 'Returned Product'}</h2>
+      </section>
+
+      {/* WHAT WE FOUND (Section 79 Specification) */}
+      <section className="what-we-found-card" aria-label="What we found">
+        <h3 className="sub-section-title">What we found</h3>
+
+        <div className="findings-rows-list">
+          {/* 1. Product check */}
+          <div className="finding-row-item">
+            <span className="finding-row-label">Product</span>
+            <div className="finding-row-content">
+              <span className={`status-badge-clean ${productStatusClass}`}>
+                {productStatusLabel}
+              </span>
+              <span className="finding-row-desc">
+                {identityPassed
+                  ? `Matches catalogue item specifications (${result.identity_basis || 'Visual markings match'})`
+                  : (identityFailed
+                      ? `Returned item does not match catalogue item (${result.identity_basis || 'Markings or form factor mismatch'})`
+                      : `Identity uncertain (${result.identity_basis || 'Cannot confirm authentic markings from photos'})`)}
+              </span>
+            </div>
+          </div>
+
+          {/* 2. Included items (No checkmark bullets; uses clear Found/Missing status labels) */}
+          <div className="finding-row-item">
+            <span className="finding-row-label">Included items</span>
+            <div className="finding-row-content">
+              <span className={`status-badge-clean ${!hasMissing && completenessPassed ? 'status-tag-pass' : (hasMissing ? 'status-tag-fail' : 'status-tag-uncertain')}`}>
+                {hasMissing
+                  ? `${foundItems.length} found, ${missingItems.length} missing`
+                  : (completenessPassed ? `All ${expectedItems.length || 'expected'} items found` : 'Not clear')}
+              </span>
+              <div className="items-breakdown-list">
+                {missingItems.map(item => (
+                  <div key={item} className="item-line item-line-missing">
+                    <span className="item-status-tag tag-missing">Missing</span>
+                    <span className="item-name">{item}</span>
+                  </div>
+                ))}
+                {foundItems.map(item => (
+                  <div key={item} className="item-line item-line-found">
+                    <span className="item-status-tag tag-found">Found</span>
+                    <span className="item-name">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Condition */}
+          <div className="finding-row-item">
+            <span className="finding-row-label">Condition</span>
+            <div className="finding-row-content">
+              <span className="status-badge-clean status-tag-neutral">
+                {conditionMeta.title}
+              </span>
+              <span className="finding-row-desc">
+                {result.condition_basis || conditionMeta.description}
+              </span>
+            </div>
+          </div>
+
+          {/* 4. Photos */}
+          <div className="finding-row-item">
+            <span className="finding-row-label">Photos</span>
+            <div className="finding-row-content">
+              <span className={`status-badge-clean ${photoQualityMeta.isGood ? 'status-tag-pass' : 'status-tag-uncertain'}`}>
+                {photoQualityMeta.isGood ? 'Clear enough' : 'Not clear enough'}
+              </span>
+              <span className="finding-row-desc">
+                {photoQualityMeta.headline}
+              </span>
+            </div>
           </div>
         </div>
+      </section>
 
-        <h2 className="rec-hero-title">
-          {overrideState ? overrideState.revised_verdict : actionMeta.title}
-        </h2>
-
-        {/* Clear contextual finding directly under title (replaces contradictory floating pill) */}
-        <div className="rec-context-label">
-          {confidenceContextLine}
+      {/* RECOMMENDATION (Section 79 Specification) */}
+      <section className={`recommendation-box hero-${actionMeta.heroClass}`} aria-label="Recommendation">
+        <div className="rec-box-header">
+          <span className="rec-box-kicker">Recommendation</span>
+          <span className="rec-context-sub">{confidenceContextLine}</span>
         </div>
 
-        {/* Override banner if supervisor modified decision */}
+        <h3 className="rec-action-heading">
+          {overrideState ? overrideState.revised_verdict : actionMeta.title}
+        </h3>
+
+        <p className="rec-action-why">
+          {whyExplanation}
+        </p>
+
         {overrideState && (
           <div className="override-notice-banner">
             <EditIcon size={14} />
@@ -141,61 +210,19 @@ export function ResultCard({
             </span>
           </div>
         )}
+      </section>
 
-        {/* 2. ONE-LINE WHY */}
-        <div className="rec-why-box">
-          <span className="rec-why-label">Why:</span>
-          <span className="rec-why-text">{whyExplanation}</span>
+      {/* HOW SURE ARE WE? (Section 79 Specification) */}
+      <section className="confidence-assessment-box" aria-label="How sure are we">
+        <div className="confidence-assessment-header">
+          <span className="confidence-q-title">How sure are we?</span>
+          <span className={`confidence-level-tag level-${confidenceMeta.level.toLowerCase()}`}>
+            {confidenceMeta.level}
+          </span>
         </div>
-
-        {/* 3. THE FOUR CHECK RESULTS (each one line, no duplicate catalogue lists) */}
-        <div className="four-checks-card" aria-label="Four core check results">
-          {/* Check 1: Identity */}
-          <div className="check-row">
-            <span className="check-row-label">
-              <span className="check-row-icon" aria-hidden="true">
-                {identityPassed ? '✅' : (identityFailed ? '❌' : '⚠️')}
-              </span>
-              <strong>Product check:</strong>
-            </span>
-            <span className="check-row-value">{identityText}</span>
-          </div>
-
-          {/* Check 2: Completeness (Single authoritative place for missing items) */}
-          <div className="check-row">
-            <span className="check-row-label">
-              <span className="check-row-icon" aria-hidden="true">
-                {completenessPassed ? '✅' : (missingList.length > 0 || result.completeness === 'FAIL' ? '❌' : '⚠️')}
-              </span>
-              <strong>Items included:</strong>
-            </span>
-            <span className="check-row-value">
-              {completenessText}
-            </span>
-          </div>
-
-          {/* Check 3: Condition */}
-          <div className="check-row">
-            <span className="check-row-label">
-              <span className="check-row-icon" aria-hidden="true">
-                {conditionMeta.status === 'success' ? '✅' : (conditionMeta.status === 'error' ? '❌' : '⚠️')}
-              </span>
-              <strong>Condition:</strong>
-            </span>
-            <span className="check-row-value">{conditionText}</span>
-          </div>
-
-          {/* Check 4: Recommended Action */}
-          <div className="check-row">
-            <span className="check-row-label">
-              <span className="check-row-icon" aria-hidden="true">
-                {actionMeta.icon}
-              </span>
-              <strong>Recommended action:</strong>
-            </span>
-            <span className="check-row-value">{actionText}</span>
-          </div>
-        </div>
+        <p className="confidence-assessment-text">
+          {confidenceMeta.description}
+        </p>
       </section>
 
       {/* OPERATOR ACTIONS */}
@@ -205,7 +232,7 @@ export function ResultCard({
             type="button"
             className="btn-operator-primary"
             onClick={() => setShowSaveConfirm(true)}
-            title="Approve and save this recommendation"
+            title="Approve recommendation and save this return"
           >
             <CheckIcon size={16} />
             <span>{overrideState ? "Confirm updated decision" : "Approve recommendation"}</span>
@@ -271,7 +298,7 @@ export function ResultCard({
                 <div className="confirm-row">
                   <span>Action:</span>
                   <strong className="confirm-action-name">
-                    {actionMeta.icon} {overrideState ? overrideState.revised_verdict : actionMeta.title}
+                    {overrideState ? overrideState.revised_verdict : actionMeta.title}
                   </strong>
                 </div>
                 {overrideState ? (

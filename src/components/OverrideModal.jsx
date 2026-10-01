@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CrossIcon, EditIcon, CheckIcon } from './Icons.jsx';
+import { CrossIcon, EditIcon, CheckIcon, ActionIcon } from './Icons.jsx';
 import { sanitizeInput } from '../services/authAndStorage.js';
 import { translateDisposition, ACTION_DEFINITIONS } from '../utils/userFacingText.js';
 
@@ -65,8 +65,8 @@ export function OverrideModal({
               <>
                 <div className="override-current-box">
                   <span className="override-current-label">Current recommendation:</span>
-                  <div className="override-current-val">
-                    <span aria-hidden="true">{currentAction.icon}</span>
+                  <div className="override-current-val" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
+                    <ActionIcon disposition={currentDisposition} size={15} />
                     <strong>{currentAction.title}</strong>
                   </div>
                 </div>
@@ -83,7 +83,7 @@ export function OverrideModal({
                   >
                     {Object.keys(ACTION_DEFINITIONS).map(key => (
                       <option key={key} value={key}>
-                        {ACTION_DEFINITIONS[key].icon} {ACTION_DEFINITIONS[key].title}
+                        {ACTION_DEFINITIONS[key].title}
                       </option>
                     ))}
                   </select>
@@ -113,13 +113,19 @@ export function OverrideModal({
                   Confirm updated decision
                 </p>
                 <div className="confirm-summary-box">
-                  <div className="confirm-row">
+                  <div className="confirm-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span>From:</span>
-                    <strong>{currentAction.icon} {currentAction.title}</strong>
+                    <strong style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <ActionIcon disposition={currentDisposition} size={13} />
+                      <span>{currentAction.title}</span>
+                    </strong>
                   </div>
-                  <div className="confirm-row" style={{ marginTop: '0.35rem' }}>
+                  <div className="confirm-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.35rem' }}>
                     <span>To:</span>
-                    <strong>{revisedAction.icon} {revisedAction.title}</strong>
+                    <strong style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <ActionIcon disposition={revisedDisposition} size={13} />
+                      <span>{revisedAction.title}</span>
+                    </strong>
                   </div>
                   <div className="confirm-reason-text">
                     "{reason}"

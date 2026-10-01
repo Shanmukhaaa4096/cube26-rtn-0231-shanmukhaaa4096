@@ -269,3 +269,50 @@ export function ListIcon({ size = 16, color = "currentColor", ...props }) {
     </svg>
   );
 }
+
+export function WrenchIcon({ size = 16, color = "currentColor", ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  );
+}
+
+export function TagIcon({ size = 16, color = "currentColor", ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+      <path d="M7 7h.01" />
+    </svg>
+  );
+}
+
+export function TrashIcon({ size = 16, color = "currentColor", ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 6h18" />
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
+export function ActionIcon({ disposition, size = 16, color = "currentColor", ...props }) {
+  switch (disposition) {
+    case 'restock':
+      return <BoxIcon size={size} color={color} {...props} />;
+    case 'refurbish':
+      return <WrenchIcon size={size} color={color} {...props} />;
+    case 'liquidate':
+      return <TagIcon size={size} color={color} {...props} />;
+    case 'dispose':
+      return <TrashIcon size={size} color={color} {...props} />;
+    case 'pending_review':
+      return <UserIcon size={size} color={color} {...props} />;
+    default:
+      return <BoxIcon size={size} color={color} {...props} />;
+  }
+}
+

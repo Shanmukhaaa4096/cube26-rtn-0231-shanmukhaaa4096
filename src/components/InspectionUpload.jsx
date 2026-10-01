@@ -194,7 +194,8 @@ export function InspectionUpload({
             </div>
           ) : (
             <div className="no-photos-hint">
-              <span>⚠️ No photos attached yet. Add photos to begin checking the item.</span>
+              <AlertIcon size={14} />
+              <span>No photos attached yet. Add photos to begin checking the item.</span>
             </div>
           )}
         </div>
@@ -207,7 +208,7 @@ export function InspectionUpload({
           disabled={isInspecting || !selectedSku}
         >
           <CameraIcon size={18} />
-          <span>{isInspecting ? "Checking Return..." : "Check Return"}</span>
+          <span>{isInspecting ? "Inspecting item..." : "Start inspection"}</span>
         </button>
 
         {/* Collapsible Test & Simulation Helpers (for evaluation / testing edge cases) */}
@@ -217,7 +218,7 @@ export function InspectionUpload({
             className="test-controls-toggle"
             onClick={() => setShowTestControls(!showTestControls)}
           >
-            <span>{showTestControls ? "Hide testing options ▲" : "Testing options (simulations) ▼"}</span>
+            <span>{showTestControls ? "Hide test options" : "Show test options"}</span>
           </button>
 
           {showTestControls && (

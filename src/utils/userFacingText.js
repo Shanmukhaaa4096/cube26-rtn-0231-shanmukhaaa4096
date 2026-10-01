@@ -48,7 +48,7 @@ export const ACTION_DEFINITIONS = {
     title: 'Put back in stock',
     actionLabel: 'Put back in stock',
     shortLabel: 'Restock',
-    icon: '📦',
+    icon: 'box',
     heroClass: 'restock',
     badgeClass: 'badge-restock',
     color: '#15803d',
@@ -61,7 +61,7 @@ export const ACTION_DEFINITIONS = {
     title: 'Send for repair',
     actionLabel: 'Send for repair',
     shortLabel: 'Repair',
-    icon: '🔧',
+    icon: 'wrench',
     heroClass: 'refurbish',
     badgeClass: 'badge-refurbish',
     color: '#b45309',
@@ -74,7 +74,7 @@ export const ACTION_DEFINITIONS = {
     title: 'Sell through clearance',
     actionLabel: 'Sell through clearance',
     shortLabel: 'Clearance',
-    icon: '💰',
+    icon: 'tag',
     heroClass: 'liquidate',
     badgeClass: 'badge-liquidate',
     color: '#c2410c',
@@ -87,7 +87,7 @@ export const ACTION_DEFINITIONS = {
     title: 'Dispose of item',
     actionLabel: 'Dispose of item',
     shortLabel: 'Dispose',
-    icon: '🗑️',
+    icon: 'trash',
     heroClass: 'dispose',
     badgeClass: 'badge-dispose',
     color: '#b91c1c',
@@ -100,7 +100,7 @@ export const ACTION_DEFINITIONS = {
     title: 'Needs human checking',
     actionLabel: 'Needs human checking',
     shortLabel: 'Check',
-    icon: '👤',
+    icon: 'user',
     heroClass: 'review',
     badgeClass: 'badge-review',
     color: '#334155',
@@ -214,7 +214,7 @@ export function translateConfidence(confidence, gating) {
   if (tier === 'HIGH') {
     return {
       level: 'High',
-      icon: '🟢',
+      icon: 'high',
       color: '#15803d',
       bgColor: '#dcfce7',
       label: 'High',
@@ -225,7 +225,7 @@ export function translateConfidence(confidence, gating) {
   if (tier === 'MEDIUM') {
     return {
       level: 'Medium',
-      icon: '🟡',
+      icon: 'medium',
       color: '#b45309',
       bgColor: '#fef3c7',
       label: 'Medium',
@@ -235,7 +235,7 @@ export function translateConfidence(confidence, gating) {
 
   return {
     level: 'Low',
-    icon: '🔴',
+    icon: 'low',
     color: '#b91c1c',
     bgColor: '#fee2e2',
     label: 'Low',

@@ -8,7 +8,8 @@ import {
   AlertIcon,
   LockIcon,
   CodeIcon,
-  BoxIcon
+  BoxIcon,
+  ActionIcon
 } from './Icons.jsx';
 import { generateEvidenceRecord } from '../services/evidenceContract.js';
 import {
@@ -118,8 +119,9 @@ export function DetailModal({ record, onClose, session }) {
             <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>
               Return Details: {record.record_id}
             </span>
-            <span className={`badge ${action.badgeClass}`}>
-              {action.icon} {action.title}
+            <span className={`badge ${action.badgeClass}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              <ActionIcon disposition={currentDisp} size={13} />
+              <span>{action.title}</span>
             </span>
           </div>
 
@@ -164,8 +166,10 @@ export function DetailModal({ record, onClose, session }) {
             <div>
               {/* Main Decision Banner */}
               <div className={`recommendation-hero hero-${action.heroClass}`} style={{ marginBottom: '1rem', padding: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '1.4rem' }} aria-hidden="true">{action.icon}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center' }} aria-hidden="true">
+                    <ActionIcon disposition={currentDisp} size={22} />
+                  </span>
                   <div>
                     <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 700, opacity: 0.8 }}>
                       Recommended Action
@@ -213,7 +217,11 @@ export function DetailModal({ record, onClose, session }) {
                   <div className={`finding-card finding-${identity.status}`}>
                     <div className="finding-header">
                       <span className="finding-type-title">Product check</span>
-                      <span className="finding-status-icon">{identity.status === 'pass' ? '✅' : (identity.status === 'fail' ? '❌' : '⚠️')}</span>
+                      <span className="finding-status-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                        {identity.status === 'pass' && <CheckIcon size={14} color="#15803d" />}
+                        {identity.status === 'fail' && <CrossIcon size={14} color="#b91c1c" />}
+                        {identity.status === 'uncertain' && <AlertIcon size={14} color="#b45309" />}
+                      </span>
                     </div>
                     <div className="finding-summary">{identity.label}</div>
                     <div className="finding-detail">{record.identity_basis || (identity.status === 'pass' ? 'Item matches specifications' : 'Issue with product match')}</div>
@@ -222,7 +230,9 @@ export function DetailModal({ record, onClose, session }) {
                   <div className={`finding-card finding-${completeness.status}`}>
                     <div className="finding-header">
                       <span className="finding-type-title">Items included</span>
-                      <span className="finding-status-icon">{completeness.status === 'pass' ? '✅' : '❌'}</span>
+                      <span className="finding-status-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                        {completeness.status === 'pass' ? <CheckIcon size={14} color="#15803d" /> : <CrossIcon size={14} color="#b91c1c" />}
+                      </span>
                     </div>
                     <div className="finding-summary">{completeness.label}</div>
                     <div className="finding-detail">
@@ -235,7 +245,9 @@ export function DetailModal({ record, onClose, session }) {
                   <div className={`finding-card finding-${cond.status}`}>
                     <div className="finding-header">
                       <span className="finding-type-title">Condition</span>
-                      <span className="finding-status-icon">{cond.status === 'success' ? '✅' : '⚠️'}</span>
+                      <span className="finding-status-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                        {cond.status === 'success' ? <CheckIcon size={14} color="#15803d" /> : <AlertIcon size={14} color="#b45309" />}
+                      </span>
                     </div>
                     <div className="finding-summary">{cond.title}</div>
                     <div className="finding-detail">{cond.description}</div>

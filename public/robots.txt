@@ -1,2 +1,7 @@
 User-agent: *
-Disallow: /
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /returns/
+
+Sitemap: https://cube26-rtn-0231-shanmukhaaa4096.vercel.app/sitemap.xml
