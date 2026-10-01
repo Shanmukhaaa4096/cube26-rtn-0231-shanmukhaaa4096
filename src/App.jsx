@@ -14,9 +14,9 @@ import { ArrowUpIcon, AlertIcon, CheckIcon, CameraIcon, ListIcon, BookIcon } fro
 import { PRODUCT_CATALOGUE, getProductBySku } from './data/catalogue.js';
 import { INITIAL_RETURNS_LOG, generateTenantImageUri } from './data/seedReturns.js';
 import { PRD_TEST_SCENARIOS } from './data/testScenarios.js';
-import { batchInspectReturn } from './services/aiInspector.js';
+import { inspectReturnApi } from './services/inspectionService.js';
 import { generateEvidenceRecord } from './services/evidenceContract.js';
-import { getTenantReturns, getTenantReturnById } from './services/authAndStorage.js';
+import { getTenantReturns } from './services/authAndStorage.js';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('inspection'); // 'inspection' | 'history' | 'catalogue'
@@ -38,9 +38,8 @@ export default function App() {
     }
   }, [darkMode]);
 
-  // Network State (Section 5: Offline & Slow network indicators)
+  // Network State
   const [isOnline, setIsOnline] = useState(navigator.onLine !== false);
-  const [isSlowNetwork, setIsSlowNetwork] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -96,24 +95,22 @@ export default function App() {
   }, [returnsLog]);
 
   // Inspection Input State
-  const [orderId, setOrderId] = useState('ORD-SCEN-10001');
-  const [unitId, setUnitId] = useState('UNIT-SCEN-001');
+  const [orderId, setOrderId] = useState('ORD-10001');
+  const [unitId, setUnitId] = useState('UNIT-001');
   const [selectedSku, setSelectedSku] = useState('SKU-HEADPHONE-BT');
   const [photos, setPhotos] = useState([
     {
       url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=700&auto=format&fit=crop&q=80",
       tenant_path: generateTenantImageUri("org_demo_alpha", "UNIT-SCEN-001", 1),
-      label: "Front view - Headphone and molded hardshell case"
+      label: "Photo 1: Headphone and molded carrying case"
     },
     {
       url: "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=700&auto=format&fit=crop&q=80",
       tenant_path: generateTenantImageUri("org_demo_alpha", "UNIT-SCEN-001", 2),
-      label: "Accessory check - USB-C, 3.5mm cable, manual laid out"
+      label: "Photo 2: Cables, adapters, and manuals"
     }
   ]);
   const [missingParts, setMissingParts] = useState([]);
-  const [observedState, setObservedState] = useState('factory_sealed');
-  const [amazonCondition, setAmazonCondition] = useState('New');
   const [isAmbiguous, setIsAmbiguous] = useState(false);
   const [simulateFailure, setSimulateFailure] = useState(false);
   const [activeScenarioId, setActiveScenarioId] = useState(1);
@@ -134,15 +131,15 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
 
-  // Active product derived from catalogue
+  // Active product derived from catalogue (single source of truth)
   const activeProduct = getProductBySku(selectedSku);
 
   // Run initial inspection on mount
   useEffect(() => {
-    handleRunInspection(1);
+    handleRunInspection();
   }, []);
 
-  // Compute live stats for active tenant (Query level)
+  // Compute live operational stats for active tenant
   const tenantItems = returnsLog.filter(item => item.org_id === activeTenant);
   const restockItems = tenantItems.filter(item => {
     const disp = item.overrides ? item.overrides.revised_verdict : item.disposition;
@@ -152,54 +149,52 @@ export default function App() {
     const disp = item.overrides ? item.overrides.revised_verdict : item.disposition;
     return disp === 'pending_review' || item.identity === 'UNCERTAIN' || item.condition === 'Uncertain';
   });
-  const restockRate = tenantItems.length > 0
-    ? Math.round((restockItems.length / tenantItems.length) * 100)
-    : 0;
+  const completedItems = tenantItems.filter(item => {
+    const disp = item.overrides ? item.overrides.revised_verdict : item.disposition;
+    return disp !== 'pending_review' && item.identity !== 'UNCERTAIN' && item.condition !== 'Uncertain';
+  });
 
-  // Unified Batched Model Inspection
-  const handleRunInspection = async (forcedScenarioId = null) => {
-    if (!selectedSku) return;
+  // Unified Inspection Execution
+  const handleRunInspection = async (overridePhotos = null, overrideSku = null, overrideOrderId = null) => {
+    const targetSku = overrideSku || selectedSku;
+    if (!targetSku) return;
 
     setIsInspecting(true);
     setOverrideState(null);
 
     try {
-      const scenarioToUse = forcedScenarioId !== null ? forcedScenarioId : activeScenarioId;
+      const targetPhotos = overridePhotos || photos;
+      const targetOrderId = overrideOrderId || orderId;
 
-      const result = await batchInspectReturn({
-        sku: selectedSku,
-        orderId,
-        photos,
-        scenarioId: scenarioToUse,
-        observedState,
+      const result = await inspectReturnApi({
+        sku: targetSku,
+        orderId: targetOrderId,
+        photos: targetPhotos,
+        session,
         manualAmbiguityFlag: isAmbiguous,
-        missingOverrides: missingParts,
-        conditionOverride: amazonCondition,
         simulateFailure: simulateFailure
       });
 
       setInspectionResult(result);
     } catch (err) {
-      console.error("Inspection failure:", err);
+      console.error("Inspection error:", err);
     } finally {
       setIsInspecting(false);
     }
   };
 
-  // Quick Load Scenario from PRD Bench
+  // Quick Load Sample Case (Populates inputs and runs inspection)
   const handleSelectScenario = (scenario) => {
     setActiveScenarioId(scenario.id);
     setOrderId(scenario.orderId);
     setUnitId(scenario.unitId);
     setSelectedSku(scenario.sku);
     setPhotos(scenario.photos);
-    setMissingParts(scenario.expectedVerdict.missing || []);
-    setObservedState(scenario.expectedVerdict.observed_state || 'opened_unused');
-    setAmazonCondition(scenario.expectedVerdict.amazon_condition || 'Used - Good');
+    setMissingParts([]);
     setIsAmbiguous(scenario.id === 9);
     setSimulateFailure(false);
 
-    handleRunInspection(scenario.id);
+    handleRunInspection(scenario.photos, scenario.sku, scenario.orderId);
   };
 
   // Order Lookup
@@ -217,8 +212,6 @@ export default function App() {
       setSelectedSku(foundPast.ordered_sku);
       setUnitId(foundPast.unit_id);
       setMissingParts(foundPast.missing || []);
-      setObservedState(foundPast.observed_state || 'opened_unused');
-      setAmazonCondition(foundPast.amazon_condition || foundPast.condition);
       setPhotos(foundPast.photo_urls?.map((path, idx) => ({
         url: foundPast.photo_display_urls?.[idx] || "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=60",
         tenant_path: path,
@@ -229,10 +222,10 @@ export default function App() {
       return;
     }
 
-    alert(`Order ID "${orderId}" not found in current organization records.`);
+    alert(`Order ID "${orderId}" not found in current facility records.`);
   };
 
-  // Commit and Log Return
+  // Save Return Record to Ledger
   const handleSaveToLog = () => {
     if (!inspectionResult || !activeProduct) return;
 
@@ -258,18 +251,18 @@ export default function App() {
       confidence_note: inspectionResult.confidence_note,
       photo_urls: photos.map((p, idx) => p.tenant_path || generateTenantImageUri(activeTenant, unitId || newRecordId, idx+1)),
       photo_display_urls: photos.map(p => p.url || p),
-      operator_id: session.username,
+      operator_id: session.fullName || session.username,
       captured_at: new Date().toISOString(),
       status: overrideState ? "OVERRIDDEN" : (inspectionResult.disposition === 'pending_review' ? "PENDING_REVIEW" : "FINALIZED"),
       overrides: overrideState
     };
 
     setReturnsLog([newRecord, ...returnsLog]);
-    setSaveSuccessMsg(`Saved record ${newRecordId} to ${activeTenant} ledger.`);
+    setSaveSuccessMsg(`Return record ${newRecordId} saved to log.`);
     setTimeout(() => setSaveSuccessMsg(''), 4000);
   };
 
-  // Reset Form
+  // Reset Form for Next Return
   const handleResetInspection = () => {
     setInspectionResult(null);
     setOverrideState(null);
@@ -282,15 +275,15 @@ export default function App() {
     setSimulateFailure(false);
   };
 
-  // Handle Login Success (Section 1)
+  // Handle Login Switcher
   const handleLoginSuccess = (newSession) => {
     setSession(newSession);
     localStorage.setItem('returns_operator_session', JSON.stringify(newSession));
-    setSaveSuccessMsg(`Signed in as ${newSession.username} (${newSession.org_id})`);
+    setSaveSuccessMsg(`Signed in as ${newSession.fullName || newSession.username}`);
     setTimeout(() => setSaveSuccessMsg(''), 4000);
   };
 
-  // Compile official 14-field evidence contract for active item
+  // Current Contract Payload
   const currentContractData = inspectionResult && activeProduct ? generateEvidenceRecord({
     recordId: `RTN-ACTIVE`,
     unitId: unitId || "UNIT-TEMP",
@@ -307,19 +300,11 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Offline State Banner (Section 5) */}
+      {/* Offline Banner */}
       {!isOnline && (
-        <div className="offline-banner">
+        <div className="offline-banner" role="alert">
           <AlertIcon size={14} />
-          <span>Offline Mode: Network disconnected. Staging returns locally until connection restores.</span>
-        </div>
-      )}
-
-      {/* Slow Network Indicator (Section 5) */}
-      {isSlowNetwork && (
-        <div className="slow-network-banner">
-          <AlertIcon size={14} />
-          <span>High Network Latency Detected: Batched offline cache active.</span>
+          <span>Offline: Internet connection disconnected. Saved returns will be stored locally.</span>
         </div>
       )}
 
@@ -327,7 +312,6 @@ export default function App() {
       <Header
         activeTenant={activeTenant}
         onSelectTenant={(t) => {
-          // Switch session demo account when tenant selector clicked
           const targetUser = t === "org_demo_alpha" ? "op_fatima" : "op_chen";
           const newSession = {
             token: `tok_${t}_${targetUser}`,
@@ -341,9 +325,10 @@ export default function App() {
         }}
         session={session}
         stats={{
-          restockRate,
+          totalProcessed: tenantItems.length,
+          restockCount: restockItems.length,
           uncertainCount: reviewItems.length,
-          totalProcessed: tenantItems.length
+          completedCount: completedItems.length
         }}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
@@ -351,24 +336,32 @@ export default function App() {
         onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
       />
 
-      {/* Mobile Menu Drawer (Section 2) */}
+      {/* Mobile Drawer */}
       {isMobileMenuOpen && (
-        <div className="mobile-nav-drawer">
+        <div className="mobile-nav-drawer" role="dialog" aria-label="Mobile navigation">
           <button
             type="button"
             className="mobile-nav-link"
             onClick={() => { setActiveTab('inspection'); setIsMobileMenuOpen(false); }}
           >
-            <span>Inspection Station</span>
+            <span>Returns (Inspection)</span>
             <span className="mono">01</span>
+          </button>
+          <button
+            type="button"
+            className="mobile-nav-link"
+            onClick={() => { setActiveTab('attention'); setIsMobileMenuOpen(false); }}
+          >
+            <span>Needs Attention ({reviewItems.length})</span>
+            <span className="mono">02</span>
           </button>
           <button
             type="button"
             className="mobile-nav-link"
             onClick={() => { setActiveTab('history'); setIsMobileMenuOpen(false); }}
           >
-            <span>Returns Ledger ({tenantItems.length})</span>
-            <span className="mono">02</span>
+            <span>Completed ({completedItems.length})</span>
+            <span className="mono">03</span>
           </button>
           <button
             type="button"
@@ -376,16 +369,12 @@ export default function App() {
             onClick={() => { setActiveTab('catalogue'); setIsMobileMenuOpen(false); }}
           >
             <span>Catalogue ({PRODUCT_CATALOGUE.length})</span>
-            <span className="mono">03</span>
+            <span className="mono">04</span>
           </button>
-          <div style={{ padding: '0.5rem 0', display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            <span>Tenant: {activeTenant}</span>
-            <span>User: {session.username}</span>
-          </div>
         </div>
       )}
 
-      {/* Navigation Sub-Bar */}
+      {/* Navigation Sub-Bar (Section 12: Clear operational navigation) */}
       <nav className="nav-bar" aria-label="Main Navigation">
         <div className="nav-tabs">
           <button
@@ -394,7 +383,19 @@ export default function App() {
             onClick={() => setActiveTab('inspection')}
           >
             <CameraIcon size={14} />
-            <span>Inspection and Disposition Station</span>
+            <span>Returns</span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-tab ${activeTab === 'attention' ? 'active' : ''}`}
+            onClick={() => setActiveTab('attention')}
+          >
+            <AlertIcon size={14} />
+            <span>Needs attention</span>
+            {reviewItems.length > 0 && (
+              <span className="nav-pill-count nav-pill-warning">{reviewItems.length}</span>
+            )}
           </button>
 
           <button
@@ -403,8 +404,8 @@ export default function App() {
             onClick={() => setActiveTab('history')}
           >
             <ListIcon size={14} />
-            <span>Returns History and Audit Log</span>
-            <span className="nav-pill-count">{tenantItems.length}</span>
+            <span>Completed</span>
+            <span className="nav-pill-count">{completedItems.length}</span>
           </button>
 
           <button
@@ -413,14 +414,14 @@ export default function App() {
             onClick={() => setActiveTab('catalogue')}
           >
             <BookIcon size={14} />
-            <span>Product Master Catalogue</span>
+            <span>Catalogue</span>
             <span className="nav-pill-count">{PRODUCT_CATALOGUE.length}</span>
           </button>
         </div>
 
         {saveSuccessMsg && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--disp-restock)', fontSize: '0.78rem', fontWeight: 600 }}>
-            <CheckIcon size={13} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--disp-restock)', fontSize: '0.8rem', fontWeight: 600 }}>
+            <CheckIcon size={14} />
             <span>{saveSuccessMsg}</span>
           </div>
         )}
@@ -429,12 +430,13 @@ export default function App() {
       {/* Main Content Area (Exactly 1 H1 per page) */}
       <main id="main-content" className="main-content">
         <h1 className="page-h1">
-          {activeTab === 'inspection' && "Returns Inspection and Disposition Station"}
-          {activeTab === 'history' && `Returns Audit Ledger (${activeTenant})`}
-          {activeTab === 'catalogue' && "Product Master Catalogue and Specifications"}
+          {activeTab === 'inspection' && "Returns Inspection Station"}
+          {activeTab === 'attention' && "Returns Needing Human Checking"}
+          {activeTab === 'history' && "Completed Returns Log"}
+          {activeTab === 'catalogue' && "Product Catalogue"}
         </h1>
 
-        {/* Scenarios Quick-Runner Strip */}
+        {/* Sample Return Cases Strip */}
         <ScenariosStrip
           onSelectScenario={handleSelectScenario}
           activeScenarioId={activeScenarioId}
@@ -442,7 +444,7 @@ export default function App() {
 
         {activeTab === 'inspection' && (
           <div className="inspection-grid">
-            {/* Left: Input, Photo Upload & Order Lookup */}
+            {/* Left: Product, Photos, and Actions */}
             <InspectionUpload
               orderId={orderId}
               setOrderId={setOrderId}
@@ -455,10 +457,6 @@ export default function App() {
               activeProduct={activeProduct}
               missingParts={missingParts}
               setMissingParts={setMissingParts}
-              observedState={observedState}
-              setObservedState={setObservedState}
-              amazonCondition={amazonCondition}
-              setAmazonCondition={setAmazonCondition}
               isAmbiguous={isAmbiguous}
               setIsAmbiguous={setIsAmbiguous}
               simulateFailure={simulateFailure}
@@ -469,7 +467,7 @@ export default function App() {
               session={session}
             />
 
-            {/* Right: Decision Result Card */}
+            {/* Right: User-Friendly Decision Result Card */}
             <ResultCard
               result={inspectionResult}
               activeProduct={activeProduct}
@@ -479,7 +477,119 @@ export default function App() {
               onSaveToLog={handleSaveToLog}
               onResetInspection={handleResetInspection}
               isInspecting={isInspecting}
+              orderId={orderId}
+              unitId={unitId}
+              photos={photos}
             />
+          </div>
+        )}
+
+        {activeTab === 'attention' && (
+          <div className="ops-card attention-queue-card">
+            <div className="card-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div className="card-title">
+                  <AlertIcon size={16} />
+                  <span>Returns Needing Attention ({reviewItems.length})</span>
+                </div>
+                <div className="tenant-badge-verified">
+                  <BuildingIcon size={12} />
+                  <span>{activeTenant === 'org_demo_alpha' ? 'Facility Alpha (Main)' : 'Facility Bravo'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="card-body">
+              {reviewItems.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                  <CheckIcon size={32} style={{ color: 'var(--disp-restock)', margin: '0 auto 0.75rem' }} />
+                  <h3 style={{ fontSize: '1rem', color: 'var(--text-main)', marginBottom: '0.35rem' }}>All caught up!</h3>
+                  <p style={{ fontSize: '0.82rem', maxWidth: '420px', margin: '0 auto' }}>
+                    There are no returns waiting for human checking in this facility. All logged items have been verified and completed.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '1rem' }}>
+                  {reviewItems.map(item => {
+                    const cond = translateCondition(item.amazon_condition || item.condition, item.observed_state);
+                    const prod = PRODUCT_CATALOGUE.find(p => p.sku === item.ordered_sku);
+
+                    return (
+                      <div
+                        key={item.record_id}
+                        className="attention-item-box"
+                        style={{
+                          border: '1px solid var(--border-color)',
+                          borderRadius: 'var(--radius-card)',
+                          padding: '1rem',
+                          background: 'var(--bg-surface)',
+                          boxShadow: 'var(--shadow-brutal)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                          <span className="mono" style={{ fontWeight: 700, fontSize: '0.85rem' }}>{item.record_id}</span>
+                          <span className="badge badge-review">Needs human checking</span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                          <img
+                            src={item.photo_display_urls?.[0] || prod?.imageUrl || "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=60"}
+                            alt={item.product_name}
+                            style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: 'var(--radius-btn)', border: '1px solid var(--border-color)' }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{item.product_name}</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                              Order: <strong>{item.order_id}</strong> | Unit: {item.unit_id}
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--color-warning)', fontWeight: 600, marginTop: '0.35rem' }}>
+                              Condition found: {cond.title}
+                            </div>
+                          </div>
+                        </div>
+
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-main)', background: 'var(--bg-subtle)', padding: '0.5rem 0.65rem', borderRadius: 'var(--radius-btn)', marginBottom: '0.85rem', lineHeight: 1.4 }}>
+                          {item.evidence?.[0] || 'Image clarity or markings could not be confirmed automatically. Physical inspection required.'}
+                        </p>
+
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            style={{ flex: 1, justifyContent: 'center', fontSize: '0.78rem', padding: '0.45rem' }}
+                            onClick={() => {
+                              setSelectedSku(item.ordered_sku);
+                              setOrderId(item.order_id);
+                              setUnitId(item.unit_id);
+                              setPhotos(item.photo_urls?.map((path, idx) => ({
+                                url: item.photo_display_urls?.[idx] || prod?.imageUrl || "",
+                                tenant_path: path,
+                                label: `Inspection Photo #${idx+1}`
+                              })) || []);
+                              setActiveTab('inspection');
+                              handleRunInspection(null, item.ordered_sku, item.order_id);
+                            }}
+                          >
+                            <CameraIcon size={13} />
+                            <span>Inspect Item</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ flex: 1, justifyContent: 'center', fontSize: '0.78rem', padding: '0.45rem' }}
+                            onClick={() => setDetailRecord(item)}
+                          >
+                            <EyeIcon size={13} />
+                            <span>View Details</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -497,32 +607,36 @@ export default function App() {
             <div className="card-header">
               <div className="card-title">
                 <BookIcon size={16} />
-                <span>Product Master Catalogue ({PRODUCT_CATALOGUE.length} Canonical SKUs)</span>
+                <span>Product Catalogue ({PRODUCT_CATALOGUE.length} Products)</span>
               </div>
             </div>
             <div className="card-body">
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '0.85rem' }}>
                 {PRODUCT_CATALOGUE.map(prod => (
-                  <div key={prod.sku} style={{ border: '1px solid var(--border-color)', borderRadius: '3px', padding: '0.85rem', background: 'var(--bg-surface)' }}>
+                  <div key={prod.sku} style={{ border: '1px solid var(--border-color)', borderRadius: '4px', padding: '0.85rem', background: 'var(--bg-surface)' }}>
                     <div style={{ display: 'flex', gap: '0.65rem', marginBottom: '0.65rem' }}>
-                      <img src={prod.imageUrl} alt={`Reference photo for ${prod.name}`} style={{ width: '70px', height: '70px', objectFit: 'cover', borderRadius: '3px', border: '1px solid var(--border-color)' }} />
+                      <img
+                        src={prod.imageUrl}
+                        alt={`Photo of ${prod.name}`}
+                        style={{ width: '70px', height: '70px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                      />
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{prod.name}</div>
-                        <div className="mono" style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                          SKU: {prod.sku} | ASIN: {prod.asin}
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{prod.name}</div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                          Category: {prod.category}
                         </div>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--disp-restock)', marginTop: '0.2rem' }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--disp-restock)', marginTop: '0.2rem' }}>
                           ${prod.retailPrice.toFixed(2)}
                         </div>
                       </div>
                     </div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                    <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: '0.5rem', lineHeight: 1.4 }}>
                       {prod.description}
                     </div>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                      Expected Parts BOM ({prod.expectedParts.length}):
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      Expected items in box ({prod.expectedParts.length}):
                     </div>
-                    <div className="parts-pills" style={{ marginTop: '0.2rem' }}>
+                    <div className="parts-pills" style={{ marginTop: '0.25rem' }}>
                       {prod.expectedParts.map(part => (
                         <span key={part} className="part-pill">
                           {part}
@@ -532,14 +646,14 @@ export default function App() {
                     <button
                       type="button"
                       className="btn-secondary"
-                      style={{ width: '100%', marginTop: '0.65rem', justifyContent: 'center' }}
+                      style={{ width: '100%', marginTop: '0.75rem', justifyContent: 'center' }}
                       onClick={() => {
                         setSelectedSku(prod.sku);
                         setActiveTab('inspection');
-                        handleRunInspection(null);
+                        handleRunInspection(null, prod.sku);
                       }}
                     >
-                      Inspect Return for this SKU
+                      Check return for this product
                     </button>
                   </div>
                 ))}
@@ -549,7 +663,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Back to Top Floating Button (Section 3) */}
+      {/* Back to Top Button */}
       {showBackToTop && (
         <button
           type="button"
@@ -562,23 +676,23 @@ export default function App() {
         </button>
       )}
 
-      {/* Footer (Section 2 & 3: Clean links, copyright 2026, clickable contact) */}
+      {/* Footer */}
       <footer className="app-footer">
         <div>
-          <span>Returns Manager v2.4 (Buildathon Stage 04) &copy; 2026</span>
+          <span>Returns Manager &copy; 2026</span>
           <span style={{ margin: '0 0.5rem' }}>|</span>
-          <span>Tenant: <strong className="mono">{activeTenant}</strong></span>
+          <span>Facility: <strong>{activeTenant === 'org_demo_alpha' ? 'Facility Alpha (Main)' : 'Facility Bravo'}</strong></span>
         </div>
 
         <div className="footer-links">
-          <button type="button" onClick={() => setIsFAQModalOpen(true)}>FAQ</button>
+          <button type="button" onClick={() => setIsFAQModalOpen(true)}>Help & FAQ</button>
           <button type="button" onClick={() => setIsPrivacyModalOpen(true)}>Privacy Policy</button>
-          <button type="button" onClick={() => setIsTermsModalOpen(true)}>Operating Terms</button>
-          <a href="mailto:ops-support@cube-buildathon.local">Contact Support</a>
+          <button type="button" onClick={() => setIsTermsModalOpen(true)}>Operating Guidelines</button>
+          <a href="mailto:ops-support@example.com">Contact Support</a>
         </div>
       </footer>
 
-      {/* Modal: Single Past Return Detail View */}
+      {/* Past Return Detail Modal */}
       {detailRecord && (
         <DetailModal
           record={detailRecord}
@@ -587,26 +701,26 @@ export default function App() {
         />
       )}
 
-      {/* Modal: Operator Override */}
+      {/* Decision Override Modal */}
       <OverrideModal
         isOpen={isOverrideModalOpen}
         onClose={() => setIsOverrideModalOpen(false)}
         currentDisposition={inspectionResult?.disposition || 'restock'}
-        operatorId={session.username}
+        operatorId={session.fullName || session.username}
         onApplyOverride={(overrideData) => {
           setOverrideState(overrideData);
-          setSaveSuccessMsg('Operator override staged. History will be preserved on commit.');
+          setSaveSuccessMsg('Decision updated. Original AI recommendation will be preserved.');
         }}
       />
 
-      {/* Modal: Official Evidence Contract JSON */}
+      {/* Technical Contract Modal (Hidden behind subtle link for auditors) */}
       <ContractModal
         isOpen={isContractModalOpen}
         onClose={() => setIsContractModalOpen(false)}
         contractData={currentContractData}
       />
 
-      {/* Modal: Operator Authentication & Tenant Switcher */}
+      {/* Operator Authentication Modal */}
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}

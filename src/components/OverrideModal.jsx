@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CrossIcon, EditIcon, CheckIcon } from './Icons.jsx';
-import { DISPOSITION_DEFINITIONS } from '../data/seedReturns.js';
 import { sanitizeInput } from '../services/authAndStorage.js';
+import { translateDisposition, ACTION_DEFINITIONS } from '../utils/userFacingText.js';
 
 export function OverrideModal({
   isOpen,
@@ -10,6 +10,7 @@ export function OverrideModal({
   operatorId,
   onApplyOverride
 }) {
+  const currentAction = translateDisposition(currentDisposition);
   const [revisedDisposition, setRevisedDisposition] = useState(
     currentDisposition === 'restock' ? 'refurbish' : 'restock'
   );
@@ -38,15 +39,22 @@ export function OverrideModal({
     onClose();
   };
 
+  const revisedAction = translateDisposition(revisedDisposition);
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="card-title">
             <EditIcon size={16} />
-            <span>Operator Override (History Preserved)</span>
+            <span>Change Decision</span>
           </div>
-          <button type="button" onClick={onClose} style={{ color: 'var(--text-muted)' }} aria-label="Close override modal">
+          <button
+            type="button"
+            onClick={onClose}
+            className="modal-close-btn"
+            aria-label="Close"
+          >
             <CrossIcon size={15} />
           </button>
         </div>
@@ -55,22 +63,27 @@ export function OverrideModal({
           <div className="modal-body">
             {!confirmStep ? (
               <>
-                <div style={{ background: 'var(--bg-subtle)', padding: '0.65rem', borderRadius: '3px', border: '1px solid var(--border-color)', fontSize: '0.78rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Original AI Verdict: </span>
-                  <strong className="badge badge-uncertain">{currentDisposition}</strong>
+                <div className="override-current-box">
+                  <span className="override-current-label">Current recommendation:</span>
+                  <div className="override-current-val">
+                    <span aria-hidden="true">{currentAction.icon}</span>
+                    <strong>{currentAction.title}</strong>
+                  </div>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label" htmlFor="override-disp-select">Revised Operator Disposition</label>
+                  <label className="form-label" htmlFor="override-disp-select">
+                    New decision
+                  </label>
                   <select
                     id="override-disp-select"
                     className="form-select"
                     value={revisedDisposition}
                     onChange={(e) => setRevisedDisposition(e.target.value)}
                   >
-                    {Object.keys(DISPOSITION_DEFINITIONS).map(key => (
+                    {Object.keys(ACTION_DEFINITIONS).map(key => (
                       <option key={key} value={key}>
-                        {DISPOSITION_DEFINITIONS[key].label}: {DISPOSITION_DEFINITIONS[key].desc}
+                        {ACTION_DEFINITIONS[key].icon} {ACTION_DEFINITIONS[key].title}
                       </option>
                     ))}
                   </select>
@@ -78,31 +91,42 @@ export function OverrideModal({
 
                 <div className="form-group">
                   <label className="form-label" htmlFor="override-reason-input">
-                    Operational Disagreement Reason <span style={{ color: '#b91c1c' }}>*</span>
+                    Why are you changing this decision? <span style={{ color: '#b91c1c' }}>*</span>
                   </label>
                   <textarea
                     id="override-reason-input"
                     className="form-input"
                     rows={3}
-                    placeholder="Provide specific physical justification (e.g. Battery capacity degraded below 60% upon bench test)..."
+                    placeholder="e.g. Inspected on physical bench — outer sleeve has handling scuffs and requires clean packaging before resale."
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     required
                   />
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem', display: 'block' }}>
-                    Engineering Rule 3: The system preserves original verdict alongside this revision in the audit ledger.
+                  <span className="form-help-text">
+                    The original AI recommendation will be preserved in the audit record alongside this note.
                   </span>
                 </div>
               </>
             ) : (
-              <div style={{ padding: '0.5rem 0' }}>
-                <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-                  Confirm Operator Override Submission?
+              <div className="override-confirm-panel">
+                <p className="override-confirm-title">
+                  Confirm updated decision
                 </p>
-                <div style={{ background: 'var(--bg-subtle)', padding: '0.65rem', borderRadius: '3px', fontSize: '0.75rem', lineHeight: 1.4 }}>
-                  <div>From: <strong className="mono">{currentDisposition}</strong> ➔ To: <strong className="mono">{revisedDisposition}</strong></div>
-                  <div style={{ marginTop: '0.25rem' }}>Reason: "{reason}"</div>
-                  <div style={{ marginTop: '0.25rem', color: 'var(--text-muted)' }}>This action will be permanently recorded under your operator ID.</div>
+                <div className="confirm-summary-box">
+                  <div className="confirm-row">
+                    <span>From:</span>
+                    <strong>{currentAction.icon} {currentAction.title}</strong>
+                  </div>
+                  <div className="confirm-row" style={{ marginTop: '0.35rem' }}>
+                    <span>To:</span>
+                    <strong>{revisedAction.icon} {revisedAction.title}</strong>
+                  </div>
+                  <div className="confirm-reason-text">
+                    "{reason}"
+                  </div>
+                  <div className="confirm-audit-text">
+                    This update will be recorded under your operator profile.
+                  </div>
                 </div>
               </div>
             )}
@@ -124,8 +148,8 @@ export function OverrideModal({
               className="btn-primary"
               disabled={!reason.trim()}
             >
-              <CheckIcon size={12} />
-              <span>{confirmStep ? "Confirm and Commit Override" : "Proceed to Confirm"}</span>
+              <CheckIcon size={14} />
+              <span>{confirmStep ? "Confirm and save change" : "Continue to confirm"}</span>
             </button>
           </div>
         </form>

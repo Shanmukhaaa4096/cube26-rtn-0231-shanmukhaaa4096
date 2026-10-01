@@ -1,49 +1,49 @@
 import React from 'react';
-import { BoxIcon, CheckIcon, CrossIcon, AlertIcon, FlagIcon } from './Icons.jsx';
+import { BoxIcon } from './Icons.jsx';
 import { PRD_TEST_SCENARIOS } from '../data/testScenarios.js';
 
-export function ScenariosStrip({ onSelectScenario, activeScenarioId }) {
-  const getScenarioIcon = (scenario) => {
-    if (scenario.id === 9) {
-      return <FlagIcon size={13} color="#f59e0b" />;
-    }
-    if (scenario.id === 10) {
-      return <AlertIcon size={13} color="#f97316" />;
-    }
-    if (scenario.expectedVerdict.identity === "FAIL") {
-      return <CrossIcon size={13} color="#b91c1c" />;
-    }
-    if (scenario.expectedVerdict.completeness === "FAIL") {
-      return <AlertIcon size={13} color="#b45309" />;
-    }
-    return <CheckIcon size={13} color="#15803d" />;
-  };
+// Human-friendly titles for the sample scenarios
+const SAMPLE_TITLES = {
+  1: '1. Sealed Headphone (Pristine)',
+  2: '2. Headphone (Missing Cable)',
+  3: '3. Desk Lamp (Light Wear)',
+  4: '4. Puzzle Box (Heavy Damage)',
+  5: '5. Incorrect Item in Box',
+  6: '6. Lookalike Lamp (Check Markings)',
+  7: '7. Unclear Label Photo',
+  8: '8. No Photos Attached',
+  9: '9. Unclear Condition',
+  10: '10. Lookalike Earbuds'
+};
 
+export function ScenariosStrip({ onSelectScenario, activeScenarioId }) {
   return (
-    <div className="scenarios-strip">
+    <div className="scenarios-strip" aria-label="Sample test cases">
       <div className="scenarios-header">
         <div className="scenarios-title">
           <BoxIcon size={14} />
-          <span>PRD Evaluation Bench: 10 Required Test Scenarios</span>
+          <span>Sample Return Cases</span>
         </div>
-        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-          Click any scenario to populate test inputs
+        <span className="scenarios-subtitle">
+          Click any example to load its photos and test the inspection
         </span>
       </div>
 
       <div className="scenarios-scroll">
         {PRD_TEST_SCENARIOS.map((scen) => {
           const isActive = activeScenarioId === scen.id;
+          const displayTitle = SAMPLE_TITLES[scen.id] || `Sample #${scen.id}`;
 
           return (
             <button
               key={scen.id}
+              type="button"
               className={`scenario-chip ${isActive ? 'active' : ''}`}
               onClick={() => onSelectScenario(scen)}
-              title={`${scen.title}: ${scen.subtitle}`}
+              title={scen.subtitle || displayTitle}
             >
-              {getScenarioIcon(scen)}
-              <span>#{scen.id} {scen.title.replace(/Scenario \d+:\s*/i, '').trim()}</span>
+              <span className="scenario-dot" aria-hidden="true" />
+              <span>{displayTitle}</span>
             </button>
           );
         })}

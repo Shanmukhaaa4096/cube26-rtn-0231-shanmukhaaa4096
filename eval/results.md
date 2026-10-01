@@ -1,9 +1,9 @@
 # Automated Returns Inspection Evaluation Report
 
-**Generated At:** 2026-09-27T14:52:46.092Z  
+**Generated At:** 2026-10-01T17:10:47.252Z  
 **Total Evaluated Units:** 10  
 **Average Latency:** 0ms  
-**Model Name:** `gemini-3.5-flash (optical pre-check)`  
+**Model Name:** `gemini-2.0-flash (optical pre-check)`  
 
 ---
 

@@ -50,19 +50,19 @@ export function AuthModal({ isOpen, onClose, currentSession, onLoginSuccess }) {
 
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              Sign in with an authorized warehouse operator or admin account to bind session and enforce query-level tenant isolation.
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Sign in with your warehouse staff account to access your facility's returns station.
             </p>
 
             {errorMsg && (
-              <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', padding: '0.5rem 0.75rem', borderRadius: '3px', color: '#b91c1c', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', padding: '0.5rem 0.75rem', borderRadius: '4px', color: '#b91c1c', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <AlertIcon size={14} />
                 <span>{errorMsg}</span>
               </div>
             )}
 
             <div className="form-group">
-              <label className="form-label" htmlFor="auth-username">Operator Username</label>
+              <label className="form-label" htmlFor="auth-username">Staff Username</label>
               <div style={{ position: 'relative' }}>
                 <input
                   id="auth-username"
@@ -82,7 +82,7 @@ export function AuthModal({ isOpen, onClose, currentSession, onLoginSuccess }) {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  style={{ fontSize: '0.7rem', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                  style={{ fontSize: '0.72rem', color: '#0284c7', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
                 >
                   {showPassword ? <UnlockIcon size={11} /> : <LockIcon size={11} />}
                   <span>{showPassword ? "Hide" : "Show"}</span>
@@ -96,27 +96,27 @@ export function AuthModal({ isOpen, onClose, currentSession, onLoginSuccess }) {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem', display: 'block' }}>
-                Rate limiting active: 5 failed attempts locks account for 30s.
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                Security check: 5 incorrect password attempts locks login for 30s.
               </span>
             </div>
 
             {/* Quick Demo Operator Picker */}
-            <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
-              <span style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                Demo Credentials (Click to load):
+            <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Demo Accounts (Click to test):
               </span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.35rem', marginTop: '0.35rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginTop: '0.35rem' }}>
                 {OPERATOR_DIRECTORY.map(user => (
                   <button
                     key={user.username}
                     type="button"
                     className="scenario-chip"
-                    style={{ fontSize: '0.7rem', justifyContent: 'space-between', padding: '0.3rem 0.5rem' }}
+                    style={{ fontSize: '0.74rem', justifyContent: 'space-between', padding: '0.35rem 0.55rem' }}
                     onClick={() => handleQuickSelect(user)}
                   >
                     <span className="mono">{user.username}</span>
-                    <span style={{ fontSize: '0.62rem', opacity: 0.8 }}>({user.org_id.replace('org_demo_', '')})</span>
+                    <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>({user.org_id.includes('alpha') ? 'Alpha' : 'Bravo'})</span>
                   </button>
                 ))}
               </div>

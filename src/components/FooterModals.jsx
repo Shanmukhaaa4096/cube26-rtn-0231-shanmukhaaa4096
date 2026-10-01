@@ -62,20 +62,20 @@ export function FAQModal({ isOpen, onClose }) {
 
   const faqs = [
     {
-      q: "How does the system handle ambiguous returns?",
-      a: "Per Engineering Rule 4, UNCERTAIN is treated as a valid first-class outcome, never a failure. If lighting is obscured, a seal is ambiguous, or a product looks visually identical to a clone, the system outputs UNCERTAIN and routes the case to pending_review."
+      q: "What happens when photos are not clear?",
+      a: "If lighting is dark, blurry, or an item cannot be clearly seen, the assistant marks the result as 'Needs human checking'. This lets an operator inspect the physical item directly rather than making a wrong call."
     },
     {
-      q: "What is the difference between observed_state and amazon_condition?",
-      a: "observed_state is a raw physical observation (e.g. factory_sealed, opened_unused, signs_of_use, damaged, empty_box, uncertain). amazon_condition is the official graded external condition (New, Used - Like New, Used - Very Good, Used - Good, Used - Acceptable, Unacceptable, Uncertain)."
+      q: "How does the assistant decide on an item's condition?",
+      a: "The assistant checks for signs of wear, opened packaging, scratches, and missing items. It assigns a simple condition rating like 'Like new', 'Lightly used', or 'Damaged' and explains why in plain language."
     },
     {
-      q: "What happens when an operator overrides an AI decision?",
-      a: "Overrides never delete data. The system preserves the original AI recommendation, the revised disposition, the operator ID, timestamp, and the required operational disagreement reason."
+      q: "Can I change an assistant recommendation?",
+      a: "Yes. You have full authority to override any recommendation. When you change a decision, simply select the new action and provide a quick reason. The original suggestion is saved in the record history for tracking."
     },
     {
-      q: "How does tenancy isolation work?",
-      a: "Data and image paths are partitioned at the query level. Even if an operator in org_demo_alpha attempts to load a unit ID or image path from org_demo_bravo, access is denied with a 403 Permission Denied security alert."
+      q: "Is my warehouse facility data isolated?",
+      a: "Yes. Each facility has its own secure space. Staff only see returns and photos assigned to their facility location."
     }
   ];
 
@@ -85,24 +85,24 @@ export function FAQModal({ isOpen, onClose }) {
         <div className="modal-header">
           <div className="card-title">
             <BookIcon size={16} />
-            <span>Operator Onboarding and FAQ</span>
+            <span>Operator Guide & FAQ</span>
           </div>
-          <button type="button" onClick={onClose} style={{ color: 'var(--text-muted)' }}>
+          <button type="button" onClick={onClose} style={{ color: 'var(--text-muted)' }} aria-label="Close modal">
             <CrossIcon size={15} />
           </button>
         </div>
-        <div className="modal-body">
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {faqs.map((faq, idx) => (
-            <div key={idx} style={{ border: '1px solid var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
+            <div key={idx} style={{ border: '1px solid var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
               <div
-                style={{ padding: '0.6rem 0.75rem', background: 'var(--bg-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem' }}
+                style={{ padding: '0.65rem 0.85rem', background: 'var(--bg-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
                 onClick={() => setOpenIndex(openIndex === idx ? -1 : idx)}
               >
                 <span>{faq.q}</span>
                 {openIndex === idx ? <ChevronUpIcon size={13} /> : <ChevronDownIcon size={13} />}
               </div>
               {openIndex === idx && (
-                <div style={{ padding: '0.65rem 0.75rem', fontSize: '0.75rem', color: 'var(--text-main)', lineHeight: 1.4, background: 'var(--bg-surface)' }}>
+                <div style={{ padding: '0.75rem 0.85rem', fontSize: '0.8rem', color: 'var(--text-main)', lineHeight: 1.5, background: 'var(--bg-surface)' }}>
                   {faq.a}
                 </div>
               )}

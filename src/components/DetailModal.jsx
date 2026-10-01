@@ -2,18 +2,20 @@ import React, { useState } from 'react';
 import {
   CrossIcon,
   CheckIcon,
-  FlagIcon,
   CopyIcon,
   PrintIcon,
   BuildingIcon,
   AlertIcon,
-  CameraIcon,
+  LockIcon,
   CodeIcon,
-  LockIcon
+  BoxIcon
 } from './Icons.jsx';
-import { DISPOSITION_DEFINITIONS } from '../data/seedReturns.js';
 import { generateEvidenceRecord } from '../services/evidenceContract.js';
-import { verifyTenantImageAccess } from '../services/authAndStorage.js';
+import {
+  translateDisposition,
+  translateVerdict,
+  translateCondition
+} from '../utils/userFacingText.js';
 
 export function DetailModal({ record, onClose, session }) {
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'json'
@@ -21,41 +23,39 @@ export function DetailModal({ record, onClose, session }) {
 
   if (!record) return null;
 
-  // Cross-tenant permission check (Section 5: Permission Denied State)
+  // Cross-tenant permission check
   const isCrossTenant = session && record.org_id && session.org_id !== record.org_id;
 
   if (isCrossTenant) {
+    const userFacility = session.org_id === 'org_demo_alpha' ? 'Facility Alpha' : 'Facility Bravo';
+    const recordFacility = record.org_id === 'org_demo_alpha' ? 'Facility Alpha' : 'Facility Bravo';
+
     return (
       <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-card" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-card" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-header" style={{ background: '#7f1d1d', color: '#fff' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700 }}>
               <LockIcon size={16} />
-              <span>Permission Denied (Tenancy Isolation Violation)</span>
+              <span>Different Warehouse Facility</span>
             </div>
-            <button type="button" onClick={onClose} style={{ color: '#fff' }}>
+            <button type="button" onClick={onClose} style={{ color: '#fff' }} aria-label="Close">
               <CrossIcon size={16} />
             </button>
           </div>
           <div className="modal-body" style={{ padding: '1.5rem', textAlign: 'center' }}>
             <div style={{ color: '#b91c1c', marginBottom: '0.5rem' }}>
-              <AlertIcon size={40} style={{ margin: '0 auto' }} />
+              <AlertIcon size={36} style={{ margin: '0 auto' }} />
             </div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-              403 Forbidden: Tenant Boundary Access Blocked
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+              Access restricted to {recordFacility}
             </h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.4 }}>
-              Unit <strong>{record.unit_id}</strong> (Record <strong>{record.record_id}</strong>) belongs to organization <strong>{record.org_id}</strong>.
-              Your current authenticated session belongs to <strong>{session.org_id}</strong>.
-              Cross-tenant access by direct link or key guessing is strictly forbidden.
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.4 }}>
+              This return item is assigned to <strong>{recordFacility}</strong>. You are currently signed into <strong>{userFacility}</strong>. Warehouse safety rules prevent viewing returns from other facilities.
             </p>
-            <div style={{ background: 'var(--bg-subtle)', padding: '0.5rem', borderRadius: '3px', fontSize: '0.72rem', color: 'var(--text-muted)' }} className="mono">
-              Audit Event Logged: UNAUTHORIZED_CROSS_TENANT_READ_ATTEMPT
-            </div>
           </div>
           <div className="modal-footer">
             <button type="button" className="btn-secondary" onClick={onClose}>
-              Close Window
+              Close
             </button>
           </div>
         </div>
@@ -64,9 +64,12 @@ export function DetailModal({ record, onClose, session }) {
   }
 
   const currentDisp = record.overrides ? record.overrides.revised_verdict : record.disposition;
-  const dispMeta = DISPOSITION_DEFINITIONS[currentDisp.toLowerCase()] || DISPOSITION_DEFINITIONS.pending_review;
+  const action = translateDisposition(currentDisp);
+  const cond = translateCondition(record.amazon_condition || record.condition, record.observed_state);
+  const identity = translateVerdict(record.identity);
+  const completeness = translateVerdict(record.completeness);
 
-  // Synthesize official 14-field evidence contract JSON
+  // Generate the official contract JSON for the technical tab
   const contractJson = generateEvidenceRecord({
     recordId: record.record_id,
     unitId: record.unit_id,
@@ -103,15 +106,21 @@ export function DetailModal({ record, onClose, session }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const dateFormatted = record.captured_at
+    ? new Date(record.captured_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : 'Recent';
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>
-              Unit Audit Record: <span className="mono">{record.record_id}</span>
+            <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>
+              Return Details: {record.record_id}
             </span>
-            <span className={`badge ${dispMeta.badgeClass}`}>{currentDisp}</span>
+            <span className={`badge ${action.badgeClass}`}>
+              {action.icon} {action.title}
+            </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -120,15 +129,16 @@ export function DetailModal({ record, onClose, session }) {
               className={`btn-secondary ${activeTab === 'overview' ? 'active' : ''}`}
               onClick={() => setActiveTab('overview')}
             >
-              Inspection Summary
+              Summary
             </button>
             <button
               type="button"
               className={`btn-secondary ${activeTab === 'json' ? 'active' : ''}`}
               onClick={() => setActiveTab('json')}
+              title="View technical record for audit"
             >
               <CodeIcon size={12} />
-              <span>Official 14-Field Contract</span>
+              <span>Technical Data</span>
             </button>
             <button
               type="button"
@@ -141,8 +151,8 @@ export function DetailModal({ record, onClose, session }) {
             <button
               type="button"
               onClick={onClose}
-              style={{ padding: '0.35rem', color: 'var(--text-muted)' }}
-              aria-label="Close modal"
+              className="modal-close-btn"
+              aria-label="Close"
             >
               <CrossIcon size={15} />
             </button>
@@ -151,199 +161,117 @@ export function DetailModal({ record, onClose, session }) {
 
         <div className="modal-body">
           {activeTab === 'overview' ? (
-            <>
-              {/* Tenant & Order metadata bar */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', background: 'var(--bg-subtle)', padding: '0.65rem', borderRadius: '3px', border: '1px solid var(--border-color)', fontSize: '0.72rem' }}>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>Order ID:</span>
-                  <span className="mono" style={{ fontWeight: 700 }}>{record.order_id}</span>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>Unit ID:</span>
-                  <span className="mono" style={{ fontWeight: 700 }}>{record.unit_id}</span>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>Tenant (Isolated):</span>
-                  <span className="mono" style={{ fontWeight: 700, color: '#0284c7' }}>{record.org_id}</span>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>Operator:</span>
-                  <span className="mono" style={{ fontWeight: 700 }}>{record.operator_id}</span>
-                </div>
-              </div>
-
-              {/* Product Info */}
-              <div style={{ padding: '0.4rem 0', borderBottom: '1px solid var(--border-color)' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{record.product_name}</div>
-                <div className="mono" style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  SKU: {record.ordered_sku} | ASIN: {record.ordered_asin || 'N/A'}
-                </div>
-              </div>
-
-              {/* Photos Gallery with Anti-Guessing Tenant Checks */}
-              {record.photo_urls && record.photo_urls.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <CameraIcon size={13} />
-                      <span>Inspection Photos ({record.photo_urls.length})</span>
-                    </div>
-                    <span className="mono" style={{ fontSize: '0.68rem', color: '#0284c7' }}>
-                      Tenant Vault: {record.org_id}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.4rem' }}>
-                    {record.photo_urls.map((path, i) => {
-                      const access = verifyTenantImageAccess(session, path);
-                      const displayImg = record.photo_display_urls?.[i] || "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=60";
-
-                      return (
-                        <div key={i} style={{ width: '140px', borderRadius: '3px', overflow: 'hidden', border: '1px solid var(--border-color)', flexShrink: 0, background: 'var(--bg-subtle)' }}>
-                          <div style={{ height: '100px', position: 'relative' }}>
-                            {access.allowed ? (
-                              <img src={displayImg} alt={`Inspection Photo ${i+1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              <div style={{ background: '#fee2e2', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b91c1c', fontSize: '0.65rem', padding: '0.5rem', textAlign: 'center' }}>
-                                Access Denied: Cross-tenant image path
-                              </div>
-                            )}
-                            <span style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(0,0,0,0.8)', color: '#fff', fontSize: '0.6rem', padding: '1px 4px', borderRadius: '2px' }}>
-                              Angle #{i+1}
-                            </span>
-                          </div>
-                          <div className="mono" style={{ fontSize: '0.6rem', padding: '3px 5px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={path}>
-                            {path}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* 4 Core Checks Summary */}
-              <div className="checks-grid">
-                <div className="check-item-box">
-                  <div className="check-header">
-                    <span className="check-label">Identity Match</span>
-                    <span className={`badge ${record.identity === 'PASS' ? 'badge-pass' : (record.identity === 'FAIL' ? 'badge-fail' : 'badge-uncertain')}`}>
-                      {record.identity}
-                    </span>
-                  </div>
-                  <div className="check-explanation">
-                    {record.identity_basis || (record.identity === 'PASS' ? "Product matches catalogue specification." : "Item failed identity check.")}
-                  </div>
-                </div>
-
-                <div className="check-item-box">
-                  <div className="check-header">
-                    <span className="check-label">Accessories Check</span>
-                    <span className={`badge ${record.completeness === 'PASS' ? 'badge-pass' : 'badge-fail'}`}>
-                      {record.completeness}
-                    </span>
-                  </div>
-                  <div className="check-explanation">
-                    {record.completeness === 'PASS' ? (
-                      <span style={{ color: 'var(--disp-restock)', fontWeight: 600 }}>All components present.</span>
-                    ) : (
-                      <span style={{ color: 'var(--disp-dispose)', fontWeight: 600 }}>
-                        Missing: {record.missing?.join(', ') || 'Core pieces'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="check-item-box">
-                  <div className="check-header">
-                    <span className="check-label">Condition Assessment</span>
-                    <span className="badge badge-pass" style={{ background: 'var(--bg-subtle)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>
-                      {record.amazon_condition || record.condition}
-                    </span>
-                  </div>
-                  <div className="check-explanation">
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                      Raw observation: <strong className="mono">{record.observed_state || 'opened_unused'}</strong>
-                    </div>
-                    <div>
-                      Amazon Condition: <strong>{record.amazon_condition || record.condition}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="check-item-box">
-                  <div className="check-header">
-                    <span className="check-label">Final Decision</span>
-                    <span className={`badge ${dispMeta.badgeClass}`}>
-                      {currentDisp}
-                    </span>
-                  </div>
-                  <div className="check-explanation">
-                    {dispMeta.desc}
-                  </div>
-                </div>
-              </div>
-
-              {/* Confidence / Uncertainty Note */}
-              {record.confidence_note && (
-                <div className="uncertainty-callout">
+            <div>
+              {/* Main Decision Banner */}
+              <div className={`recommendation-hero hero-${action.heroClass}`} style={{ marginBottom: '1rem', padding: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1.4rem' }} aria-hidden="true">{action.icon}</span>
                   <div>
-                    <div className="callout-title">Confidence &amp; Uncertainty Note</div>
-                    <div className="callout-text">{record.confidence_note}</div>
+                    <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 700, opacity: 0.8 }}>
+                      Recommended Action
+                    </div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>
+                      {action.title}
+                    </div>
                   </div>
                 </div>
-              )}
+                <p style={{ marginTop: '0.5rem', fontSize: '0.82rem', lineHeight: 1.4 }}>
+                  {action.defaultWhy}
+                </p>
 
-              {/* Evidence citations */}
-              {record.evidence && record.evidence.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
-                    Visual &amp; Reference Evidence Trail ({record.evidence.length} items)
+                {record.overrides && (
+                  <div className="override-notice-banner" style={{ marginTop: '0.5rem' }}>
+                    <AlertIcon size={13} />
+                    <span>
+                      Decision updated by operator <strong>{record.overrides.operator_id}</strong>: "{record.overrides.reason}" (Original AI: {translateDisposition(record.disposition).title})
+                    </span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                    {record.evidence.map((ev, i) => (
-                      <div key={i} className="evidence-item">
-                        <span className="mono" style={{ fontSize: '0.68rem', color: '#0284c7', fontWeight: 700 }}>
-                          [EV-0{i+1}]
-                        </span>
-                        <span>{ev}</span>
+                )}
+              </div>
+
+              {/* Product and Order Info */}
+              <div className="product-summary-card" style={{ marginBottom: '1rem' }}>
+                <div className="product-summary-info">
+                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-muted)' }}>
+                    Product
+                  </div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>
+                    {record.product_name}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    Order: <strong>{record.order_id}</strong> | Unit: <strong>{record.unit_id}</strong> | Logged: {dateFormatted} by <strong>{record.operator_id}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* What did we find? Cards */}
+              <div style={{ marginBottom: '1rem' }}>
+                <h4 style={{ fontSize: '0.82rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                  What did we find?
+                </h4>
+                <div className="findings-grid">
+                  <div className={`finding-card finding-${identity.status}`}>
+                    <div className="finding-header">
+                      <span className="finding-type-title">Product check</span>
+                      <span className="finding-status-icon">{identity.status === 'pass' ? '✅' : (identity.status === 'fail' ? '❌' : '⚠️')}</span>
+                    </div>
+                    <div className="finding-summary">{identity.label}</div>
+                    <div className="finding-detail">{record.identity_basis || (identity.status === 'pass' ? 'Item matches specifications' : 'Issue with product match')}</div>
+                  </div>
+
+                  <div className={`finding-card finding-${completeness.status}`}>
+                    <div className="finding-header">
+                      <span className="finding-type-title">Items included</span>
+                      <span className="finding-status-icon">{completeness.status === 'pass' ? '✅' : '❌'}</span>
+                    </div>
+                    <div className="finding-summary">{completeness.label}</div>
+                    <div className="finding-detail">
+                      {record.missing && record.missing.length > 0
+                        ? `Missing: ${record.missing.join(', ')}`
+                        : 'All required items present in box'}
+                    </div>
+                  </div>
+
+                  <div className={`finding-card finding-${cond.status}`}>
+                    <div className="finding-header">
+                      <span className="finding-type-title">Condition</span>
+                      <span className="finding-status-icon">{cond.status === 'success' ? '✅' : '⚠️'}</span>
+                    </div>
+                    <div className="finding-summary">{cond.title}</div>
+                    <div className="finding-detail">{cond.description}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Photos Gallery */}
+              {record.photo_display_urls && record.photo_display_urls.length > 0 && (
+                <div>
+                  <h4 style={{ fontSize: '0.82rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                    Inspection photos ({record.photo_display_urls.length})
+                  </h4>
+                  <div className="photo-gallery">
+                    {record.photo_display_urls.map((url, idx) => (
+                      <div key={idx} className="photo-card">
+                        <img src={url} alt={`Inspection angle ${idx + 1}`} />
+                        <div className="photo-badge">Photo {idx + 1}</div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-
-              {/* Override Log preserving history */}
-              {record.overrides && (
-                <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '3px', padding: '0.65rem' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#b45309', marginBottom: '0.2rem' }}>
-                    Immutable Operator Override Audit Trail (Rule 3)
-                  </div>
-                  <div style={{ fontSize: '0.78rem' }}>
-                    Original AI verdict: <strong className="badge badge-uncertain">{record.overrides.original_verdict}</strong> ➔ Revised to: <strong className="badge badge-pass">{record.overrides.revised_verdict}</strong>
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                    Operator: <strong>{record.overrides.operator_id}</strong> | Timestamp: <span className="mono">{new Date(record.overrides.timestamp).toLocaleString()}</span>
-                  </div>
-                  <div style={{ fontSize: '0.72rem', marginTop: '0.15rem', fontStyle: 'italic' }}>
-                    Justification: "{record.overrides.reason}"
-                  </div>
-                </div>
-              )}
-            </>
+            </div>
           ) : (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Official 14-Field Evidence Contract (Ready for Recovery Manager ingestion)
-                </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                <span>Standard 14-Field Evidence Contract</span>
                 <button
                   type="button"
                   className="btn-secondary"
                   onClick={handleCopyJson}
-                  style={{ padding: '0.3rem 0.55rem' }}
+                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem' }}
                 >
                   {copied ? <CheckIcon size={12} color="#15803d" /> : <CopyIcon size={12} />}
-                  <span>{copied ? 'Copied to Clipboard' : 'Copy Contract JSON'}</span>
+                  <span>{copied ? 'Copied' : 'Copy JSON'}</span>
                 </button>
               </div>
               <pre className="json-viewer">
@@ -354,8 +282,8 @@ export function DetailModal({ record, onClose, session }) {
         </div>
 
         <div className="modal-footer">
-          <button type="button" className="btn-secondary" onClick={onClose}>
-            Close Record
+          <button type="button" className="btn-primary" onClick={onClose}>
+            Close
           </button>
         </div>
       </div>
