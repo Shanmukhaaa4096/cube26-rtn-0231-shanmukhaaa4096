@@ -79,7 +79,7 @@ export function InspectionUpload({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span className="mono" style={{ fontSize: '0.7rem', background: 'var(--bg-subtle)', color: 'var(--text-main)', padding: '2px 6px', borderRadius: '3px', border: '1px solid var(--border-color)', fontWeight: 600 }}>
-            Batched 1-Call Vision Model
+            AI Check
           </span>
           <span className="mono" style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
             UNIT: {unitId || 'PENDING'}
@@ -163,7 +163,7 @@ export function InspectionUpload({
 
               <div style={{ marginTop: '0.35rem' }}>
                 <span style={{ fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                  Expected Parts BOM (Click to flag missing):
+                  Expected Accessories (Click to flag missing):
                 </span>
                 <div className="parts-pills">
                   {activeProduct.expectedParts.map(part => {
@@ -329,12 +329,12 @@ export function InspectionUpload({
           disabled={isInspecting || !selectedSku}
         >
           <CameraIcon size={16} />
-          <span>{isInspecting ? "Executing Batched Multimodal Analysis..." : "Run Batched AI Returns Inspection"}</span>
+          <span>{isInspecting ? "Executing AI Returns Inspection..." : "Run AI Returns Inspection"}</span>
         </button>
 
         {isInspecting && (
           <div style={{ marginTop: '0.6rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            <span>Evaluating Identity, Completeness BOM, Observed State, and Amazon Condition in a single unified model inference...</span>
+            <span>Evaluating Identity, Accessories, Physical Condition, and Final Decision...</span>
           </div>
         )}
       </div>

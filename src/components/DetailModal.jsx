@@ -237,7 +237,7 @@ export function DetailModal({ record, onClose, session }) {
 
                 <div className="check-item-box">
                   <div className="check-header">
-                    <span className="check-label">Completeness (BOM)</span>
+                    <span className="check-label">Accessories Check</span>
                     <span className={`badge ${record.completeness === 'PASS' ? 'badge-pass' : 'badge-fail'}`}>
                       {record.completeness}
                     </span>
@@ -272,7 +272,7 @@ export function DetailModal({ record, onClose, session }) {
 
                 <div className="check-item-box">
                   <div className="check-header">
-                    <span className="check-label">Disposition Gate</span>
+                    <span className="check-label">Final Decision</span>
                     <span className={`badge ${dispMeta.badgeClass}`}>
                       {currentDisp}
                     </span>

@@ -29,6 +29,12 @@ export function ResultCard({
   const [evidenceExpanded, setEvidenceExpanded] = useState(true);
   const [copiedId, setCopiedId] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [showTechDetails, setShowTechDetails] = useState(false);
+  const [expandedCard, setExpandedCard] = useState({});
+
+  const toggleCard = (cardKey) => {
+    setExpandedCard(prev => ({ ...prev, [cardKey]: !prev[cardKey] }));
+  };
 
   // Honest Skeleton Loading State (Section 5)
   if (isInspecting) {
@@ -37,7 +43,7 @@ export function ResultCard({
         <div style={{ marginBottom: '1rem' }}>
           <div className="skeleton-box" style={{ height: '70px', width: '100%', marginBottom: '1rem' }}></div>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '1rem' }}>
-            Analyzing photo pixels against canonical catalogue geometry and expected BOM components...
+            Analyzing inspection photos against catalogue specifications and expected accessories...
           </p>
           <div className="checks-grid">
             <div className="skeleton-box" style={{ height: '80px' }}></div>
@@ -68,6 +74,16 @@ export function ResultCard({
   }
 
   const effectiveDisposition = overrideState ? overrideState.revised_verdict : result.disposition;
+  const rawErrorText = result.raw_error || (
+    (result.confidence_note && (
+      result.confidence_note.includes('FAIL_OPEN') ||
+      result.confidence_note.includes('GoogleGenerativeAI') ||
+      result.confidence_note.includes('Error fetching') ||
+      result.confidence_note.includes('503') ||
+      result.confidence_note.includes('Model error')
+    )) ? result.confidence_note : null
+  );
+  const isAnalysisFailed = Boolean(rawErrorText);
   const isPendingReview = effectiveDisposition === 'pending_review' || result.identity === 'UNCERTAIN' || result.completeness === 'UNCERTAIN' || result.condition === 'Uncertain';
   const dispMeta = DISPOSITION_DEFINITIONS[effectiveDisposition.toLowerCase()] || DISPOSITION_DEFINITIONS.pending_review;
 
@@ -161,16 +177,59 @@ export function ResultCard({
         </div>
       </div>
 
-      {/* Uncertainty & Fail-Open Advisory Callout */}
-      {(result.confidence_note || isPendingReview) && (
+      {/* Uncertainty & Error Advisory Callout */}
+      {(isAnalysisFailed || result.confidence_note || isPendingReview) && (
         <div className="uncertainty-callout">
           <AlertIcon size={18} color="#b45309" style={{ flexShrink: 0, marginTop: '2px' }} />
-          <div>
+          <div style={{ flex: 1 }}>
             <div className="callout-title">
-              {isPendingReview ? "Flagged UNCERTAIN / pending_review: First-Class Audit State" : "Confidence / Uncertainty Advisory"}
+              {isAnalysisFailed ? "Manual Review Required" : (isPendingReview ? "Pending Manual Review" : "Advisory Note")}
             </div>
             <div className="callout-text">
-              {result.confidence_note || "System evidence is inconclusive or ambiguous. Per Engineering Rule 4, UNCERTAIN is a valid first-class outcome that strictly routes to pending_review. Forwarded to warehouse supervisor inspection queue."}
+              {isAnalysisFailed ? (
+                <div>
+                  <div>Could not analyze — sent for manual review.</div>
+                  {rawErrorText && (
+                    <div style={{ marginTop: '0.35rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowTechDetails(!showTechDetails)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#b45309',
+                          textDecoration: 'underline',
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontSize: '0.72rem',
+                          fontWeight: 600
+                        }}
+                      >
+                        {showTechDetails ? "Hide technical details ▲" : "Technical details ▼"}
+                      </button>
+                      {showTechDetails && (
+                        <div
+                          className="mono"
+                          style={{
+                            marginTop: '0.35rem',
+                            padding: '0.4rem 0.5rem',
+                            background: 'rgba(0,0,0,0.06)',
+                            borderRadius: '4px',
+                            fontSize: '0.68rem',
+                            wordBreak: 'break-all',
+                            maxHeight: '120px',
+                            overflowY: 'auto'
+                          }}
+                        >
+                          {rawErrorText}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                result.confidence_note || "Visual evidence is inconclusive — queued for supervisor review."
+              )}
             </div>
           </div>
         </div>
@@ -185,92 +244,180 @@ export function ResultCard({
             {getIdentityBadge(result.identity)}
           </div>
           <div className="check-explanation">
-            {result.identity_basis || (result.identity === "PASS"
-              ? `Visual alignment verified against catalogue specs for ${activeProduct?.name || 'ordered SKU'}.`
-              : "Discrepancy detected between returned item and catalogue entry.")}
-          </div>
-        </div>
-
-        {/* Check 2: Completeness BOM */}
-        <div className="check-item-box">
-          <div className="check-header">
-            <span className="check-label">2. Completeness (BOM)</span>
-            {getCompletenessBadge(result.completeness)}
-          </div>
-          <div className="check-explanation">
-            {result.completeness === "PASS" ? (
-              <span style={{ color: 'var(--disp-restock)', fontWeight: 600 }}>
-                All expected parts and accessories verified present.
-              </span>
-            ) : result.completeness === "UNCERTAIN" ? (
-              <span style={{ color: '#b45309', fontWeight: 600 }}>
-                BOM verification inconclusive from provided images.
-              </span>
-            ) : (
-              <div>
-                <span style={{ color: 'var(--disp-dispose)', fontWeight: 600 }}>Missing Components:</span>
-                <ul style={{ paddingLeft: '1rem', marginTop: '0.2rem', color: 'var(--disp-dispose)' }}>
-                  {result.missing?.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
+            <div style={{ fontWeight: 600, color: result.identity === 'PASS' ? 'var(--disp-restock)' : (result.identity === 'FAIL' ? 'var(--disp-dispose)' : '#b45309'), marginBottom: '2px' }}>
+              {result.identity === 'PASS' && (activeProduct ? `Matches ${activeProduct.name}` : "Product identity verified.")}
+              {result.identity === 'FAIL' && "Item mismatch — wrong product returned."}
+              {result.identity === 'UNCERTAIN' && (isAnalysisFailed ? "Could not analyze — sent for manual review." : "Product identity unconfirmed.")}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              {result.identity === 'PASS' && "Visual features and branding align with master specification."}
+              {result.identity === 'FAIL' && "Visual features do not match expected catalogue entry."}
+              {result.identity === 'UNCERTAIN' && (isAnalysisFailed ? "Automated check unavailable." : "Visual evidence is ambiguous or low resolution.")}
+            </div>
+            {result.identity_basis && !isAnalysisFailed && (
+              <div style={{ marginTop: '0.3rem' }}>
+                <button
+                  type="button"
+                  onClick={() => toggleCard('identity')}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.68rem', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  {expandedCard.identity ? "Less ▲" : "Details ▼"}
+                </button>
+                {expandedCard.identity && (
+                  <div style={{ fontSize: '0.72rem', marginTop: '0.25rem', color: 'var(--text-main)' }}>
+                    {result.identity_basis}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Check 3: Raw Observation vs Amazon Published Condition Grade */}
+        {/* Check 2: Accessories Check */}
         <div className="check-item-box">
           <div className="check-header">
-            <span className="check-label">3. Physical Condition Assessment</span>
-            <span className="badge badge-pass" style={{ background: 'var(--bg-subtle)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>
-              {result.amazon_condition || result.condition}
-            </span>
+            <span className="check-label">2. Accessories Check</span>
+            {getCompletenessBadge(result.completeness)}
           </div>
           <div className="check-explanation">
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
-              Raw observation: <strong className="mono">{result.observed_state || 'opened_unused'}</strong>
+            <div style={{ fontWeight: 600, color: result.completeness === 'PASS' ? 'var(--disp-restock)' : (result.completeness === 'FAIL' ? 'var(--disp-dispose)' : '#b45309'), marginBottom: '2px' }}>
+              {result.completeness === 'PASS' && "All expected accessories present."}
+              {result.completeness === 'FAIL' && (
+                result.missing?.length > 0
+                  ? `Missing: ${result.missing.slice(0, 2).join(', ')}${result.missing.length > 2 ? ` (+${result.missing.length - 2} more)` : ''}`
+                  : "One or more expected accessories missing."
+              )}
+              {result.completeness === 'UNCERTAIN' && (isAnalysisFailed ? "Could not analyze — sent for manual review." : "Accessories check inconclusive.")}
             </div>
-            <div>
-              Amazon Condition: <strong>{result.amazon_condition || result.condition}</strong> (graded against Amazon published condition guidelines, not raw observation state).
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              {result.completeness === 'PASS' && "All required parts and documentation verified in parcel."}
+              {result.completeness === 'FAIL' && `${result.missing?.length || 1} required accessory item(s) absent from package.`}
+              {result.completeness === 'UNCERTAIN' && (isAnalysisFailed ? "Automated check unavailable." : "Photos do not show all contents or compartments.")}
             </div>
+            {result.missing?.length > 0 && !isAnalysisFailed && (
+              <div style={{ marginTop: '0.3rem' }}>
+                <button
+                  type="button"
+                  onClick={() => toggleCard('completeness')}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.68rem', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  {expandedCard.completeness ? "Less ▲" : "Details ▼"}
+                </button>
+                {expandedCard.completeness && (
+                  <ul style={{ paddingLeft: '1rem', marginTop: '0.25rem', fontSize: '0.72rem', color: 'var(--disp-dispose)' }}>
+                    {result.missing.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Check 4: Routing Gate (5 States) */}
+        {/* Check 3: Physical Condition */}
         <div className="check-item-box">
           <div className="check-header">
-            <span className="check-label">4. Routing Gate (5 Dispositions)</span>
+            <span className="check-label">3. Physical Condition</span>
+            <span className="badge badge-pass" style={{ background: 'var(--bg-subtle)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }}>
+              {result.amazon_condition || result.condition || 'Uncertain'}
+            </span>
+          </div>
+          <div className="check-explanation">
+            <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '2px' }}>
+              Grade: {result.amazon_condition || result.condition || 'Uncertain'}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              {(() => {
+                const cond = result.amazon_condition || result.condition;
+                if (cond === 'New') return "Unopened in original retail packaging with intact factory seals.";
+                if (cond === 'Used - Like New') return "Pristine item condition with zero cosmetic wear or marks.";
+                if (cond === 'Used - Very Good') return "Minor cosmetic blemishes; fully functional housing.";
+                if (cond === 'Used - Good') return "Moderate signs of consistent normal use; fully functional.";
+                if (cond === 'Used - Acceptable') return "Noticeable cosmetic wear or scratches; fully functional.";
+                if (cond === 'Unacceptable') return "Physical damage, cracked casing, or defect detected.";
+                return isAnalysisFailed ? "Could not analyze — sent for manual review." : "Condition cannot be reliably graded from provided photos.";
+              })()}
+            </div>
+            {(result.observed_state || result.condition_basis) && (
+              <div style={{ marginTop: '0.3rem' }}>
+                <button
+                  type="button"
+                  onClick={() => toggleCard('condition')}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.68rem', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  {expandedCard.condition ? "Less ▲" : "Details ▼"}
+                </button>
+                {expandedCard.condition && (
+                  <div style={{ fontSize: '0.72rem', marginTop: '0.25rem', color: 'var(--text-muted)' }}>
+                    <div>Raw observation: <strong className="mono">{result.observed_state || 'opened_unused'}</strong></div>
+                    {result.condition_basis && <div style={{ marginTop: '0.15rem' }}>{result.condition_basis}</div>}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Check 4: Final Decision */}
+        <div className="check-item-box">
+          <div className="check-header">
+            <span className="check-label">4. Final Decision</span>
             <span className={`badge ${dispMeta.badgeClass}`}>
               {effectiveDisposition}
             </span>
           </div>
           <div className="check-explanation">
-            {effectiveDisposition === "restock" && "Direct shelf restock (100% margin recovery)."}
-            {effectiveDisposition === "refurbish" && "Route to prep bay for accessory replenishment or repackaging."}
-            {effectiveDisposition === "liquidate" && "Secondary market channel liquidation lot."}
-            {effectiveDisposition === "dispose" && "Recycle or unrecoverable scrap disposal."}
-            {effectiveDisposition === "pending_review" && "Mandatory human review state (UNCERTAIN verdict or fail-open)."}
+            <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '2px' }}>
+              {effectiveDisposition === "restock" && "Return to active shelf inventory."}
+              {effectiveDisposition === "refurbish" && "Route to prep bay for repackaging."}
+              {effectiveDisposition === "liquidate" && "Route to secondary liquidation lot."}
+              {effectiveDisposition === "dispose" && "Send to scrap recycling or disposal."}
+              {effectiveDisposition === "pending_review" && "Hold for supervisor review."}
+            </div>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              {effectiveDisposition === "restock" && "Complete and pristine — 100% margin recovery."}
+              {effectiveDisposition === "refurbish" && "Requires accessory replenishment before resale."}
+              {effectiveDisposition === "liquidate" && "Cosmetic wear exceeds primary shelf standards."}
+              {effectiveDisposition === "dispose" && "Item is defective or unrecoverable scrap."}
+              {effectiveDisposition === "pending_review" && (isAnalysisFailed ? "Could not analyze — sent for manual review." : (overrideState ? `Overridden by operator: ${overrideState.reason}` : "Uncertain checks require operator confirmation."))}
+            </div>
+            {dispMeta.desc && (
+              <div style={{ marginTop: '0.3rem' }}>
+                <button
+                  type="button"
+                  onClick={() => toggleCard('decision')}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.68rem', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  {expandedCard.decision ? "Less ▲" : "Details ▼"}
+                </button>
+                {expandedCard.decision && (
+                  <div style={{ fontSize: '0.72rem', marginTop: '0.25rem', color: 'var(--text-muted)' }}>
+                    {dispMeta.desc}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Model Performance & Batch Metadata */}
+      {/* Model Performance & Metadata */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-subtle)', padding: '0.45rem 0.65rem', borderRadius: 'var(--radius-btn)', border: '1px solid var(--border-color)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
         <div>
           {result.is_demo_mode ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <span className="badge" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', fontSize: '0.65rem', padding: '1px 6px' }}>
-                DEMO MODE (OFFLINE BENCHMARK)
+                OFFLINE BENCHMARK
               </span>
               <span>Model: <strong className="mono">{result.model_version}</strong></span>
             </span>
           ) : (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <span className="badge" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: '0.65rem', padding: '1px 6px' }}>
-                LIVE GEMINI VISION
+                AI CHECK
               </span>
-              <span>Model: <strong className="mono">{result.model_version}</strong> (1 batched call)</span>
+              <span>Model: <strong className="mono">{result.model_version}</strong></span>
             </span>
           )}
         </div>
