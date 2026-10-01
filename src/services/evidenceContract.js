@@ -26,7 +26,7 @@ export function generateEvidenceRecord({
 
   // Build checks[] array strictly with required keys:
   // check_key, verdict, confidence, detail, model_version, latency_ms
-  const modelVersion = inspectionResult.model_version || "gemini-3.5-flash";
+  const modelVersion = inspectionResult.model_version || "gemini-2.0-flash";
   const latencyMs = inspectionResult.latency_ms || 650;
 
   const checks = [
